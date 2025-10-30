@@ -1,0 +1,26 @@
+# Core dependencies
+rdflib>=7.0.0
+pandas>=2.1.0
+openpyxl>=3.1.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+pyshacl>=0.25.0
+typer>=0.9.0
+PyYAML>=6.0.1
+python-dateutil>=2.8.2
+
+# CLI and output
+rich>=13.7.0
+click>=8.1.7
+
+# Development and testing
+pytest>=7.4.3
+pytest-cov>=4.1.0
+mypy>=1.7.1
+black>=23.12.0
+ruff>=0.1.8
+
+# Type stubs
+types-PyYAML>=6.0.12
+types-python-dateutil>=2.8.19
+pandas-stubs>=2.1.1

@@ -1,0 +1,469 @@
+{
+  "$defs": {
+    "ColumnMapping": {
+      "description": "Mapping for a single column to an ontology property.",
+      "properties": {
+        "as": {
+          "description": "Target ontology property IRI or CURIE",
+          "title": "As",
+          "type": "string"
+        },
+        "datatype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "XSD datatype for the value (e.g., xsd:string, xsd:decimal)",
+          "title": "Datatype"
+        },
+        "transform": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/TransformType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Transformation to apply before mapping",
+          "title": "Transform"
+        },
+        "default": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default value if column is empty",
+          "title": "Default"
+        },
+        "required": {
+          "default": false,
+          "description": "Whether this column is required",
+          "title": "Required",
+          "type": "boolean"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Language tag for string literals",
+          "title": "Language"
+        },
+        "multi_valued": {
+          "default": false,
+          "description": "Whether column contains multiple values (comma-separated)",
+          "title": "Multi Valued",
+          "type": "boolean"
+        },
+        "delimiter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Delimiter for multi-valued columns",
+          "title": "Delimiter"
+        }
+      },
+      "required": [
+        "as"
+      ],
+      "title": "ColumnMapping",
+      "type": "object"
+    },
+    "DefaultsConfig": {
+      "description": "Default configuration values.",
+      "properties": {
+        "base_iri": {
+          "description": "Base IRI for resource generation",
+          "title": "Base Iri",
+          "type": "string"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default language tag",
+          "title": "Language"
+        }
+      },
+      "required": [
+        "base_iri"
+      ],
+      "title": "DefaultsConfig",
+      "type": "object"
+    },
+    "ErrorHandling": {
+      "description": "Error handling strategies.",
+      "enum": [
+        "report",
+        "fail-fast"
+      ],
+      "title": "ErrorHandling",
+      "type": "string"
+    },
+    "LinkedObject": {
+      "description": "Configuration for creating linked object resources.",
+      "properties": {
+        "predicate": {
+          "description": "Object property linking main resource to this object",
+          "title": "Predicate",
+          "type": "string"
+        },
+        "class": {
+          "description": "RDF class for the linked object",
+          "title": "Class",
+          "type": "string"
+        },
+        "iri_template": {
+          "description": "IRI template for generating object IRIs",
+          "title": "Iri Template",
+          "type": "string"
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObjectPropertyMapping"
+          },
+          "description": "Properties of the linked object",
+          "title": "Properties"
+        }
+      },
+      "required": [
+        "predicate",
+        "class",
+        "iri_template"
+      ],
+      "title": "LinkedObject",
+      "type": "object"
+    },
+    "ObjectPropertyMapping": {
+      "description": "Mapping for a linked object (object property).",
+      "properties": {
+        "column": {
+          "description": "Source column name",
+          "title": "Column",
+          "type": "string"
+        },
+        "as": {
+          "description": "Target ontology property",
+          "title": "As",
+          "type": "string"
+        },
+        "datatype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Datatype"
+        },
+        "transform": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/TransformType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transform"
+        },
+        "default": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        }
+      },
+      "required": [
+        "column",
+        "as"
+      ],
+      "title": "ObjectPropertyMapping",
+      "type": "object"
+    },
+    "ProcessingOptions": {
+      "description": "Processing options.",
+      "properties": {
+        "delimiter": {
+          "default": ",",
+          "description": "CSV delimiter",
+          "title": "Delimiter",
+          "type": "string"
+        },
+        "header": {
+          "default": true,
+          "description": "Whether CSV has header row",
+          "title": "Header",
+          "type": "boolean"
+        },
+        "on_error": {
+          "$ref": "#/$defs/ErrorHandling",
+          "default": "report",
+          "description": "Error handling strategy"
+        },
+        "skip_empty_values": {
+          "default": true,
+          "description": "Skip columns with empty values",
+          "title": "Skip Empty Values",
+          "type": "boolean"
+        },
+        "chunk_size": {
+          "default": 1000,
+          "description": "Number of rows to process at a time",
+          "title": "Chunk Size",
+          "type": "integer"
+        }
+      },
+      "title": "ProcessingOptions",
+      "type": "object"
+    },
+    "RowResource": {
+      "description": "Configuration for the main resource created from each row.",
+      "properties": {
+        "class": {
+          "description": "RDF class for the resource",
+          "title": "Class",
+          "type": "string"
+        },
+        "iri_template": {
+          "description": "IRI template using column placeholders",
+          "title": "Iri Template",
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "iri_template"
+      ],
+      "title": "RowResource",
+      "type": "object"
+    },
+    "SHACLValidationConfig": {
+      "description": "SHACL validation configuration.",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Whether to run SHACL validation",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "shapes_file": {
+          "description": "Path to SHACL shapes file",
+          "title": "Shapes File",
+          "type": "string"
+        },
+        "inference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Inference mode (rdfs, owlrl, both)",
+          "title": "Inference"
+        }
+      },
+      "required": [
+        "shapes_file"
+      ],
+      "title": "SHACLValidationConfig",
+      "type": "object"
+    },
+    "SheetMapping": {
+      "description": "Mapping configuration for a single sheet/file.",
+      "properties": {
+        "name": {
+          "description": "Logical name for this sheet",
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "description": "Path to CSV/XLSX file (relative or absolute)",
+          "title": "Source",
+          "type": "string"
+        },
+        "row_resource": {
+          "$ref": "#/$defs/RowResource",
+          "description": "Configuration for main row resource"
+        },
+        "columns": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ColumnMapping"
+          },
+          "description": "Column to property mappings",
+          "title": "Columns",
+          "type": "object"
+        },
+        "objects": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LinkedObject"
+          },
+          "description": "Linked object configurations",
+          "title": "Objects",
+          "type": "object"
+        },
+        "filter_condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional condition to filter rows (not implemented in v1)",
+          "title": "Filter Condition"
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "row_resource"
+      ],
+      "title": "SheetMapping",
+      "type": "object"
+    },
+    "TransformType": {
+      "description": "Built-in transformation types.",
+      "enum": [
+        "to_decimal",
+        "to_integer",
+        "to_date",
+        "to_datetime",
+        "to_boolean",
+        "uppercase",
+        "lowercase",
+        "strip"
+      ],
+      "title": "TransformType",
+      "type": "string"
+    },
+    "ValidationConfig": {
+      "description": "Validation configuration.",
+      "properties": {
+        "shacl": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SHACLValidationConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ValidationConfig",
+      "type": "object"
+    }
+  },
+  "description": "Root mapping configuration schema.",
+  "properties": {
+    "namespaces": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Namespace prefix to IRI mappings",
+      "title": "Namespaces",
+      "type": "object"
+    },
+    "defaults": {
+      "$ref": "#/$defs/DefaultsConfig",
+      "description": "Default configuration values"
+    },
+    "sheets": {
+      "description": "Sheet/file mappings",
+      "items": {
+        "$ref": "#/$defs/SheetMapping"
+      },
+      "title": "Sheets",
+      "type": "array"
+    },
+    "validation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValidationConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Validation configuration"
+    },
+    "options": {
+      "$ref": "#/$defs/ProcessingOptions",
+      "description": "Processing options"
+    }
+  },
+  "required": [
+    "namespaces",
+    "defaults",
+    "sheets"
+  ],
+  "title": "MappingConfig",
+  "type": "object"
+}

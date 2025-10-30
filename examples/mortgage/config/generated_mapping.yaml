@@ -1,0 +1,83 @@
+namespaces:
+  brick: https://brickschema.org/schema/Brick#
+  csvw: http://www.w3.org/ns/csvw#
+  dc: http://purl.org/dc/elements/1.1/
+  dcat: http://www.w3.org/ns/dcat#
+  dcmitype: http://purl.org/dc/dcmitype/
+  dcterms: http://purl.org/dc/terms/
+  dcam: http://purl.org/dc/dcam/
+  doap: http://usefulinc.com/ns/doap#
+  foaf: http://xmlns.com/foaf/0.1/
+  geo: http://www.opengis.net/ont/geosparql#
+  odrl: http://www.w3.org/ns/odrl/2/
+  org: http://www.w3.org/ns/org#
+  prof: http://www.w3.org/ns/dx/prof/
+  prov: http://www.w3.org/ns/prov#
+  qb: http://purl.org/linked-data/cube#
+  schema: https://schema.org/
+  sh: http://www.w3.org/ns/shacl#
+  skos: http://www.w3.org/2004/02/skos/core#
+  sosa: http://www.w3.org/ns/sosa/
+  ssn: http://www.w3.org/ns/ssn/
+  time: http://www.w3.org/2006/time#
+  vann: http://purl.org/vocab/vann/
+  void: http://rdfs.org/ns/void#
+  wgs: https://www.w3.org/2003/01/geo/wgs84_pos#
+  owl: http://www.w3.org/2002/07/owl#
+  rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  xsd: http://www.w3.org/2001/XMLSchema#
+  xml: http://www.w3.org/XML/1998/namespace
+  ex: https://example.com/mortgage#
+defaults:
+  base_iri: http://example.org/mortgage/
+sheets:
+- name: loans
+  source: ../data/loans.csv
+  row_resource:
+    class: ex:MortgageLoan
+    iri_template: mortgage_loan:{LoanID}_mortgage_loan:{BorrowerID}_mortgage_loan:{BorrowerName}_mortgage_loan:{PropertyID}_mortgage_loan:{PropertyAddress}_mortgage_loan:{Principal}_mortgage_loan:{InterestRate}_mortgage_loan:{OriginationDate}
+  columns:
+    Principal:
+      as: ex:principalAmount
+      datatype: xsd:integer
+      required: true
+      _comment: The original loan amount.
+    InterestRate:
+      as: ex:interestRate
+      datatype: xsd:decimal
+      required: true
+      _comment: The annual interest rate as a decimal (e.g., 0.0525 for 5.25%).
+    OriginationDate:
+      as: ex:originationDate
+      datatype: xsd:date
+      required: true
+      _comment: The date when the loan was originated.
+    LoanTerm:
+      as: ex:loanTerm
+      datatype: xsd:integer
+      required: true
+      _comment: The term of the loan in months.
+    Status:
+      as: ex:loanStatus
+      datatype: xsd:string
+      required: true
+      _comment: Current status of the loan (Active, Paid Off, Default, etc.).
+  objects:
+    has borrower:
+      predicate: ex:hasBorrower
+      class: ex:Borrower
+      iri_template: borrower:{LoanID}_borrower:{BorrowerID}_borrower:{BorrowerName}_borrower:{PropertyID}_borrower:{PropertyAddress}_borrower:{Principal}_borrower:{InterestRate}_borrower:{OriginationDate}
+      properties:
+      - column: BorrowerName
+        as: ex:borrowerName
+    collateral property:
+      predicate: ex:collateralProperty
+      class: ex:Property
+      iri_template: property:{LoanID}_property:{BorrowerID}_property:{BorrowerName}_property:{PropertyID}_property:{PropertyAddress}_property:{Principal}_property:{InterestRate}_property:{OriginationDate}
+      properties:
+      - column: PropertyAddress
+        as: ex:propertyAddress
+options:
+  on_error: report
+  skip_empty_values: true

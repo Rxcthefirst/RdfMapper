@@ -1,0 +1,6 @@
+LoanID,BorrowerID,BorrowerName,PropertyID,PropertyAddress,Principal,InterestRate,OriginationDate,LoanTerm,Status
+L-1001,B-9001,Alex Morgan,P-7001,12 Oak St,250000,0.0525,2023-06-15,360,Active
+L-1002,B-9002,Jamie Lee,P-7002,88 Pine Ave,475000,0.0475,2022-11-30,360,Active
+L-1003,B-9003,Taylor Smith,P-7003,456 Elm Dr,325000,0.0550,2023-01-10,240,Active
+L-1004,B-9004,Jordan Davis,P-7004,789 Maple Ln,550000,0.0425,2022-08-22,360,Active
+L-1005,B-9005,Casey Brown,P-7005,321 Birch Ct,280000,0.0500,2023-03-15,300,Active
