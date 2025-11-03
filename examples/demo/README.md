@@ -54,11 +54,11 @@ rdfmap validate-ontology \
   --verbose
 ```
 
-**Expected Result**: Coverage around 50-60% - below the 70% threshold.
+**Expected Result**: Coverage 0% - dramatically below the 70% threshold.
 
 ### Step 2: Generate Initial Mapping
 
-Attempt to map employee data with limited SKOS coverage:
+Attempt to map employee data with no SKOS coverage:
 
 ```bash
 rdfmap generate \
@@ -70,9 +70,9 @@ rdfmap generate \
 ```
 
 **Expected Result**: 
-- **Success Rate**: 40-50%
-- **Unmapped Columns**: emp_num, mgr_id, dept_code, annual_comp, etc.
-- **SKOS Suggestions**: 6-8 suggestions for hidden labels
+- **Success Rate**: 14.3% (2/14 columns)
+- **Unmapped Columns**: emp_num, fname, lname, job_ttl, dept_code, mgr_id, hire_dt, annual_comp, etc.
+- **SKOS Suggestions**: 6 suggestions for hidden labels
 
 ### Step 3: First Enrichment
 
@@ -103,7 +103,7 @@ rdfmap validate-ontology \
   --min-coverage 0.7
 ```
 
-**Expected Result**: Coverage improves to 65-75%
+**Expected Result**: Coverage improves to 28.6%
 
 ### Step 5: Re-generate Mapping
 
@@ -119,9 +119,9 @@ rdfmap generate \
 ```
 
 **Expected Result**:
-- **Success Rate**: 70-80% (significant improvement!)
-- **Unmapped Columns**: 2-4 remaining
-- **Higher Confidence**: More matches use exact SKOS labels
+- **Success Rate**: 42.9% (6/14 columns - significant +28.6% improvement!)
+- **Unmapped Columns**: 8 remaining (down from 12)
+- **Higher Confidence**: Average confidence increases from 0.60 to 0.85
 
 ### Step 6: Second Enrichment
 
@@ -150,9 +150,9 @@ rdfmap generate \
 ```
 
 **Expected Result**:
-- **Success Rate**: 85-95%
-- **Unmapped Columns**: 0-2
-- **High Confidence**: Most matches are exact
+- **Success Rate**: 42.9% (maintains improvement)
+- **Unmapped Columns**: 8 (fname, lname, email_addr, phone, middle_init, mgr_id, dept_code, cost_ctr)
+- **High Confidence**: All 6 mapped columns have 0.85 confidence
 
 ### Step 8: Analyze Statistics
 
@@ -170,18 +170,23 @@ rdfmap stats \
 TREND ANALYSIS
 ----------------------------------------------------------------------
 Overall Trend: 📈 IMPROVING
-Success Rate: 45.0% → 90.0% (+45.0%)
-Avg Confidence: 0.52 → 0.88 (+0.36)
+Success Rate: 14.3% → 42.9% (+28.6%)
+Avg Confidence: 0.60 → 0.85 (+0.25)
+Total Improvement Score: +0.27
 
 MOST IMPROVED COLUMNS
 ----------------------------------------------------------------------
 1. emp_num
-   Current Success Rate: 100.0%
-   Appearances: 3
+   Success Rate: 100.0% (mapped in reports 2-3)
+   Trend: 📈 improving
 
-2. mgr_id
-   Current Success Rate: 100.0%
-   Appearances: 3
+2. job_ttl  
+   Success Rate: 100.0% (mapped in reports 2-3)
+   Trend: 📈 improving
+
+3. hire_dt
+   Success Rate: 100.0% (mapped in reports 2-3) 
+   Trend: 📈 improving
 ```
 
 ## Running the Demo

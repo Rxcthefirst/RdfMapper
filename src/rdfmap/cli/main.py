@@ -14,7 +14,7 @@ from ..parsers.data_source import create_parser
 from ..validator.shacl import validate_rdf, write_validation_report, validate_against_ontology
 from ..validator.config import validate_namespace_prefixes, validate_required_fields
 from ..generator.mapping_generator import MappingGenerator, GeneratorConfig
-from ..generator.spreadsheet_analyzer import SpreadsheetAnalyzer
+from ..generator.data_analyzer import DataSourceAnalyzer
 from ..generator.ontology_analyzer import OntologyAnalyzer
 from ..generator.ontology_enricher import OntologyEnricher
 from ..models.enrichment import (
@@ -122,7 +122,7 @@ def convert(
                 console.print(f"  • In {context}: {warning}")
         
         if verbose:
-            console.print(f"[green]Configuration loaded and validated successfully[/green]")
+            console.print("[green]Configuration loaded and validated successfully[/green]")
             console.print(f"  Sheets: {len(config.sheets)}")
             console.print(f"  Namespaces: {len(config.namespaces)}")
         
@@ -236,7 +236,7 @@ def convert(
             
             console.print(f"[blue]Writing {output_format.upper()} to {output}...[/blue]")
             serialize_graph(graph, output_format, output)
-            console.print(f"[green]Output written successfully[/green]")
+            console.print("[green]Output written successfully[/green]")
         elif dry_run:
             console.print("[yellow]Dry run mode: no output written[/yellow]")
         elif not output:
@@ -364,7 +364,7 @@ def info(
         
         # Validation
         if config.validation and config.validation.shacl:
-            console.print(f"\n[bold cyan]Validation:[/bold cyan]")
+            console.print("\n[bold cyan]Validation:[/bold cyan]")
             console.print(f"  SHACL Enabled: {config.validation.shacl.enabled}")
             console.print(f"  Shapes File: {config.validation.shacl.shapes_file}")
         
@@ -426,11 +426,11 @@ def generate(
         exists=True,
         dir_okay=False,
     ),
-    spreadsheet: Path = typer.Option(
+    data: Path = typer.Option(
         ...,
-        "--spreadsheet",
-        "-s",
-        help="Path to spreadsheet file (CSV or XLSX)",
+        "--data",
+        "-d",
+        help="Path to data file (CSV, XLSX, JSON, or XML)",
         exists=True,
         dir_okay=False,
     ),
@@ -469,6 +469,11 @@ def generate(
         "--export-schema",
         help="Export JSON Schema for mapping validation",
     ),
+    imports: Optional[List[str]] = typer.Option(
+        None,
+        "--import",
+        help="Additional ontology files to import (can be specified multiple times)",
+    ),
     alignment_report: bool = typer.Option(
         False,
         "--alignment-report",
@@ -482,30 +487,30 @@ def generate(
     ),
 ):
     """
-    Generate a mapping configuration from an ontology and spreadsheet.
-    
-    This command analyzes your ontology and spreadsheet to automatically
+    Generate a mapping configuration from an ontology and data source.
+
+    This command analyzes your ontology and data source to automatically
     generate a mapping configuration file. It will:
     
     - Extract classes and properties from the ontology
-    - Analyze column types and patterns in the spreadsheet
-    - Match columns to ontology properties
-    - Suggest IRI templates based on identifier columns
-    - Detect potential linked objects
-    
+    - Analyze data types and patterns in the data source (CSV, XLSX, JSON, XML)
+    - Match data fields to ontology properties
+    - Suggest IRI templates based on identifier fields
+    - Detect potential linked objects and nested structures
+
     The generated configuration can then be refined manually if needed.
     """
     try:
         console.print("[blue]Analyzing ontology...[/blue]")
-        onto_analyzer = OntologyAnalyzer(str(ontology))
+        onto_analyzer = OntologyAnalyzer(str(ontology), imports=imports)
         console.print(f"  Found {len(onto_analyzer.classes)} classes")
         console.print(f"  Found {len(onto_analyzer.properties)} properties")
         
-        console.print("\n[blue]Analyzing spreadsheet...[/blue]")
-        sheet_analyzer = SpreadsheetAnalyzer(str(spreadsheet))
-        console.print(f"  Columns: {len(sheet_analyzer.columns)}")
-        console.print(f"  Identifier columns: {[c.name for c in sheet_analyzer.get_identifier_columns()]}")
-        
+        console.print("\n[blue]Analyzing data source...[/blue]")
+        sheet_analyzer = DataSourceAnalyzer(str(data))
+        console.print(f"  Columns: {len(sheet_analyzer.get_column_names())}")
+        console.print(f"  Identifier columns: {sheet_analyzer.suggest_iri_template_columns()}")
+
         if analyze_only:
             console.print("\n[bold]Spreadsheet Analysis:[/bold]")
             console.print(sheet_analyzer.summary())
@@ -530,13 +535,14 @@ def generate(
         
         config = GeneratorConfig(
             base_iri=base_iri,
+            imports=imports,
             include_comments=True,
             auto_detect_relationships=True,
         )
         
         generator = MappingGenerator(
             str(ontology),
-            str(spreadsheet),
+            str(data),
             config,
         )
         
@@ -606,8 +612,8 @@ def generate(
         # Show next steps
         console.print("\n[bold]Next Steps:[/bold]")
         console.print(f"1. Review the generated mapping: {output}")
-        console.print(f"2. Refine column-to-property mappings if needed")
-        console.print(f"3. Run conversion:")
+        console.print("2. Refine column-to-property mappings if needed")
+        console.print("3. Run conversion:")
         console.print(f"   [cyan]rdfmap convert --mapping {output} --format ttl --output output.ttl[/cyan]")
         
     except Exception as e:
@@ -735,7 +741,7 @@ def enrich(
         if result.operations_applied:
             console.print(f"\n[blue]Saving enriched ontology to {output}...[/blue]")
             enricher.save(str(output))
-            console.print(f"[green]✓ Enriched ontology saved[/green]")
+            console.print("[green]✓ Enriched ontology saved[/green]")
         else:
             console.print("[yellow]No changes applied. Ontology not modified.[/yellow]")
             return
@@ -774,10 +780,10 @@ def enrich(
         # Next steps
         console.print("\n[bold]Next Steps:[/bold]")
         console.print(f"1. Review enriched ontology: {output}")
-        console.print(f"2. Commit to version control")
-        console.print(f"3. Re-run mapping generation with enriched ontology:")
-        console.print(f"   [cyan]rdfmap generate --ontology {output} --spreadsheet <data.csv> --output mapping.yaml[/cyan]")
-        
+        console.print("2. Commit to version control")
+        console.print("3. Re-run mapping generation with enriched ontology:")
+        console.print(f"   [cyan]rdfmap generate --ontology {output} --data <data.csv> --output mapping.yaml[/cyan]")
+
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         if verbose:

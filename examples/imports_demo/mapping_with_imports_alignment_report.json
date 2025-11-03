@@ -1,0 +1,2448 @@
+{
+  "generated_at": "2025-11-02T14:13:54.462168",
+  "ontology_file": "examples/imports_demo/core_ontology_fixed.ttl",
+  "spreadsheet_file": "examples/imports_demo/employees_with_imports.csv",
+  "target_class": "Employee",
+  "statistics": {
+    "total_columns": 11,
+    "mapped_columns": 3,
+    "unmapped_columns": 8,
+    "high_confidence_matches": 3,
+    "medium_confidence_matches": 0,
+    "low_confidence_matches": 0,
+    "very_low_confidence_matches": 0,
+    "mapping_success_rate": 0.2727272727272727,
+    "average_confidence": 0.85
+  },
+  "unmapped_columns": [
+    {
+      "column_name": "first_name",
+      "sample_values": [
+        "John",
+        "Jane",
+        "Bob",
+        "Alice",
+        "Charlie"
+      ],
+      "inferred_datatype": "xsd:string",
+      "reason": "No matching property found in ontology",
+      "ontology_context": {
+        "target_class": {
+          "uri": "http://example.org/hr#Employee",
+          "label": "Employee",
+          "comment": "A person employed by the organization",
+          "local_name": "Employee",
+          "properties": [
+            {
+              "uri": "http://example.org/hr#hasEmployeeID",
+              "label": "has employee ID",
+              "pref_label": "has employee ID",
+              "alt_labels": [
+                "employee identifier"
+              ],
+              "hidden_labels": [
+                "emp_id",
+                "employee_id"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#string",
+              "local_name": "hasEmployeeID"
+            },
+            {
+              "uri": "http://example.org/hr#hasSalary",
+              "label": "has salary",
+              "pref_label": "has salary",
+              "alt_labels": [
+                "earns"
+              ],
+              "hidden_labels": [
+                "sal",
+                "salary_amount"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+              "local_name": "hasSalary"
+            },
+            {
+              "uri": "http://example.org/hr#hasHireDate",
+              "label": "has hire date",
+              "pref_label": "has hire date",
+              "alt_labels": [
+                "start date"
+              ],
+              "hidden_labels": [
+                "hire_dt",
+                "start_dt"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#date",
+              "local_name": "hasHireDate"
+            }
+          ]
+        },
+        "related_classes": [
+          {
+            "uri": "http://example.org/hr#Department",
+            "label": "Department",
+            "comment": "An organizational unit within the company",
+            "local_name": "Department",
+            "properties": []
+          },
+          {
+            "uri": "http://example.org/hr#Position",
+            "label": "Position",
+            "comment": "A job position within the organization",
+            "local_name": "Position",
+            "properties": []
+          }
+        ],
+        "all_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          },
+          {
+            "uri": "http://example.org/hr#hasEmployeeID",
+            "label": "has employee ID",
+            "pref_label": "has employee ID",
+            "alt_labels": [
+              "employee identifier"
+            ],
+            "hidden_labels": [
+              "emp_id",
+              "employee_id"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmployeeID"
+          },
+          {
+            "uri": "http://example.org/hr#hasSalary",
+            "label": "has salary",
+            "pref_label": "has salary",
+            "alt_labels": [
+              "earns"
+            ],
+            "hidden_labels": [
+              "sal",
+              "salary_amount"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+            "local_name": "hasSalary"
+          },
+          {
+            "uri": "http://example.org/hr#hasHireDate",
+            "label": "has hire date",
+            "pref_label": "has hire date",
+            "alt_labels": [
+              "start date"
+            ],
+            "hidden_labels": [
+              "hire_dt",
+              "start_dt"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#date",
+            "local_name": "hasHireDate"
+          },
+          {
+            "uri": "http://example.org/shared#hasFirstName",
+            "label": "has first name",
+            "pref_label": "has first name",
+            "alt_labels": [
+              "first name"
+            ],
+            "hidden_labels": [
+              "fname",
+              "first_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFirstName"
+          },
+          {
+            "uri": "http://example.org/shared#hasLastName",
+            "label": "has last name",
+            "pref_label": "has last name",
+            "alt_labels": [
+              "surname",
+              "family name"
+            ],
+            "hidden_labels": [
+              "lname",
+              "last_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasLastName"
+          },
+          {
+            "uri": "http://example.org/shared#hasFullName",
+            "label": "has full name",
+            "pref_label": "has full name",
+            "alt_labels": [
+              "name"
+            ],
+            "hidden_labels": [
+              "full_name",
+              "display_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFullName"
+          },
+          {
+            "uri": "http://example.org/shared#hasEmail",
+            "label": "has email address",
+            "pref_label": "has email address",
+            "alt_labels": [
+              "email"
+            ],
+            "hidden_labels": [
+              "email_addr",
+              "e_mail"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmail"
+          },
+          {
+            "uri": "http://example.org/shared#hasPhoneNumber",
+            "label": "has phone number",
+            "pref_label": "has phone number",
+            "alt_labels": [
+              "phone"
+            ],
+            "hidden_labels": [
+              "phone_num",
+              "tel"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasPhoneNumber"
+          }
+        ],
+        "object_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          }
+        ]
+      }
+    },
+    {
+      "column_name": "last_name",
+      "sample_values": [
+        "Smith",
+        "Doe",
+        "Johnson",
+        "Williams",
+        "Brown"
+      ],
+      "inferred_datatype": "xsd:string",
+      "reason": "No matching property found in ontology",
+      "ontology_context": {
+        "target_class": {
+          "uri": "http://example.org/hr#Employee",
+          "label": "Employee",
+          "comment": "A person employed by the organization",
+          "local_name": "Employee",
+          "properties": [
+            {
+              "uri": "http://example.org/hr#hasEmployeeID",
+              "label": "has employee ID",
+              "pref_label": "has employee ID",
+              "alt_labels": [
+                "employee identifier"
+              ],
+              "hidden_labels": [
+                "emp_id",
+                "employee_id"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#string",
+              "local_name": "hasEmployeeID"
+            },
+            {
+              "uri": "http://example.org/hr#hasSalary",
+              "label": "has salary",
+              "pref_label": "has salary",
+              "alt_labels": [
+                "earns"
+              ],
+              "hidden_labels": [
+                "sal",
+                "salary_amount"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+              "local_name": "hasSalary"
+            },
+            {
+              "uri": "http://example.org/hr#hasHireDate",
+              "label": "has hire date",
+              "pref_label": "has hire date",
+              "alt_labels": [
+                "start date"
+              ],
+              "hidden_labels": [
+                "hire_dt",
+                "start_dt"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#date",
+              "local_name": "hasHireDate"
+            }
+          ]
+        },
+        "related_classes": [
+          {
+            "uri": "http://example.org/hr#Department",
+            "label": "Department",
+            "comment": "An organizational unit within the company",
+            "local_name": "Department",
+            "properties": []
+          },
+          {
+            "uri": "http://example.org/hr#Position",
+            "label": "Position",
+            "comment": "A job position within the organization",
+            "local_name": "Position",
+            "properties": []
+          }
+        ],
+        "all_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          },
+          {
+            "uri": "http://example.org/hr#hasEmployeeID",
+            "label": "has employee ID",
+            "pref_label": "has employee ID",
+            "alt_labels": [
+              "employee identifier"
+            ],
+            "hidden_labels": [
+              "emp_id",
+              "employee_id"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmployeeID"
+          },
+          {
+            "uri": "http://example.org/hr#hasSalary",
+            "label": "has salary",
+            "pref_label": "has salary",
+            "alt_labels": [
+              "earns"
+            ],
+            "hidden_labels": [
+              "sal",
+              "salary_amount"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+            "local_name": "hasSalary"
+          },
+          {
+            "uri": "http://example.org/hr#hasHireDate",
+            "label": "has hire date",
+            "pref_label": "has hire date",
+            "alt_labels": [
+              "start date"
+            ],
+            "hidden_labels": [
+              "hire_dt",
+              "start_dt"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#date",
+            "local_name": "hasHireDate"
+          },
+          {
+            "uri": "http://example.org/shared#hasFirstName",
+            "label": "has first name",
+            "pref_label": "has first name",
+            "alt_labels": [
+              "first name"
+            ],
+            "hidden_labels": [
+              "fname",
+              "first_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFirstName"
+          },
+          {
+            "uri": "http://example.org/shared#hasLastName",
+            "label": "has last name",
+            "pref_label": "has last name",
+            "alt_labels": [
+              "surname",
+              "family name"
+            ],
+            "hidden_labels": [
+              "lname",
+              "last_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasLastName"
+          },
+          {
+            "uri": "http://example.org/shared#hasFullName",
+            "label": "has full name",
+            "pref_label": "has full name",
+            "alt_labels": [
+              "name"
+            ],
+            "hidden_labels": [
+              "full_name",
+              "display_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFullName"
+          },
+          {
+            "uri": "http://example.org/shared#hasEmail",
+            "label": "has email address",
+            "pref_label": "has email address",
+            "alt_labels": [
+              "email"
+            ],
+            "hidden_labels": [
+              "email_addr",
+              "e_mail"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmail"
+          },
+          {
+            "uri": "http://example.org/shared#hasPhoneNumber",
+            "label": "has phone number",
+            "pref_label": "has phone number",
+            "alt_labels": [
+              "phone"
+            ],
+            "hidden_labels": [
+              "phone_num",
+              "tel"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasPhoneNumber"
+          }
+        ],
+        "object_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          }
+        ]
+      }
+    },
+    {
+      "column_name": "full_name",
+      "sample_values": [
+        "John Smith",
+        "Jane Doe",
+        "Bob Johnson",
+        "Alice Williams",
+        "Charlie Brown"
+      ],
+      "inferred_datatype": "xsd:string",
+      "reason": "No matching property found in ontology",
+      "ontology_context": {
+        "target_class": {
+          "uri": "http://example.org/hr#Employee",
+          "label": "Employee",
+          "comment": "A person employed by the organization",
+          "local_name": "Employee",
+          "properties": [
+            {
+              "uri": "http://example.org/hr#hasEmployeeID",
+              "label": "has employee ID",
+              "pref_label": "has employee ID",
+              "alt_labels": [
+                "employee identifier"
+              ],
+              "hidden_labels": [
+                "emp_id",
+                "employee_id"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#string",
+              "local_name": "hasEmployeeID"
+            },
+            {
+              "uri": "http://example.org/hr#hasSalary",
+              "label": "has salary",
+              "pref_label": "has salary",
+              "alt_labels": [
+                "earns"
+              ],
+              "hidden_labels": [
+                "sal",
+                "salary_amount"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+              "local_name": "hasSalary"
+            },
+            {
+              "uri": "http://example.org/hr#hasHireDate",
+              "label": "has hire date",
+              "pref_label": "has hire date",
+              "alt_labels": [
+                "start date"
+              ],
+              "hidden_labels": [
+                "hire_dt",
+                "start_dt"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#date",
+              "local_name": "hasHireDate"
+            }
+          ]
+        },
+        "related_classes": [
+          {
+            "uri": "http://example.org/hr#Department",
+            "label": "Department",
+            "comment": "An organizational unit within the company",
+            "local_name": "Department",
+            "properties": []
+          },
+          {
+            "uri": "http://example.org/hr#Position",
+            "label": "Position",
+            "comment": "A job position within the organization",
+            "local_name": "Position",
+            "properties": []
+          }
+        ],
+        "all_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          },
+          {
+            "uri": "http://example.org/hr#hasEmployeeID",
+            "label": "has employee ID",
+            "pref_label": "has employee ID",
+            "alt_labels": [
+              "employee identifier"
+            ],
+            "hidden_labels": [
+              "emp_id",
+              "employee_id"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmployeeID"
+          },
+          {
+            "uri": "http://example.org/hr#hasSalary",
+            "label": "has salary",
+            "pref_label": "has salary",
+            "alt_labels": [
+              "earns"
+            ],
+            "hidden_labels": [
+              "sal",
+              "salary_amount"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+            "local_name": "hasSalary"
+          },
+          {
+            "uri": "http://example.org/hr#hasHireDate",
+            "label": "has hire date",
+            "pref_label": "has hire date",
+            "alt_labels": [
+              "start date"
+            ],
+            "hidden_labels": [
+              "hire_dt",
+              "start_dt"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#date",
+            "local_name": "hasHireDate"
+          },
+          {
+            "uri": "http://example.org/shared#hasFirstName",
+            "label": "has first name",
+            "pref_label": "has first name",
+            "alt_labels": [
+              "first name"
+            ],
+            "hidden_labels": [
+              "fname",
+              "first_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFirstName"
+          },
+          {
+            "uri": "http://example.org/shared#hasLastName",
+            "label": "has last name",
+            "pref_label": "has last name",
+            "alt_labels": [
+              "surname",
+              "family name"
+            ],
+            "hidden_labels": [
+              "lname",
+              "last_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasLastName"
+          },
+          {
+            "uri": "http://example.org/shared#hasFullName",
+            "label": "has full name",
+            "pref_label": "has full name",
+            "alt_labels": [
+              "name"
+            ],
+            "hidden_labels": [
+              "full_name",
+              "display_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFullName"
+          },
+          {
+            "uri": "http://example.org/shared#hasEmail",
+            "label": "has email address",
+            "pref_label": "has email address",
+            "alt_labels": [
+              "email"
+            ],
+            "hidden_labels": [
+              "email_addr",
+              "e_mail"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmail"
+          },
+          {
+            "uri": "http://example.org/shared#hasPhoneNumber",
+            "label": "has phone number",
+            "pref_label": "has phone number",
+            "alt_labels": [
+              "phone"
+            ],
+            "hidden_labels": [
+              "phone_num",
+              "tel"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasPhoneNumber"
+          }
+        ],
+        "object_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          }
+        ]
+      }
+    },
+    {
+      "column_name": "email_addr",
+      "sample_values": [
+        "john.smith@company.com",
+        "jane.doe@company.com",
+        "bob.johnson@company.com",
+        "alice.williams@company.com",
+        "charlie.brown@company.com"
+      ],
+      "inferred_datatype": "xsd:string",
+      "reason": "No matching property found in ontology",
+      "ontology_context": {
+        "target_class": {
+          "uri": "http://example.org/hr#Employee",
+          "label": "Employee",
+          "comment": "A person employed by the organization",
+          "local_name": "Employee",
+          "properties": [
+            {
+              "uri": "http://example.org/hr#hasEmployeeID",
+              "label": "has employee ID",
+              "pref_label": "has employee ID",
+              "alt_labels": [
+                "employee identifier"
+              ],
+              "hidden_labels": [
+                "emp_id",
+                "employee_id"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#string",
+              "local_name": "hasEmployeeID"
+            },
+            {
+              "uri": "http://example.org/hr#hasSalary",
+              "label": "has salary",
+              "pref_label": "has salary",
+              "alt_labels": [
+                "earns"
+              ],
+              "hidden_labels": [
+                "sal",
+                "salary_amount"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+              "local_name": "hasSalary"
+            },
+            {
+              "uri": "http://example.org/hr#hasHireDate",
+              "label": "has hire date",
+              "pref_label": "has hire date",
+              "alt_labels": [
+                "start date"
+              ],
+              "hidden_labels": [
+                "hire_dt",
+                "start_dt"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#date",
+              "local_name": "hasHireDate"
+            }
+          ]
+        },
+        "related_classes": [
+          {
+            "uri": "http://example.org/hr#Department",
+            "label": "Department",
+            "comment": "An organizational unit within the company",
+            "local_name": "Department",
+            "properties": []
+          },
+          {
+            "uri": "http://example.org/hr#Position",
+            "label": "Position",
+            "comment": "A job position within the organization",
+            "local_name": "Position",
+            "properties": []
+          }
+        ],
+        "all_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          },
+          {
+            "uri": "http://example.org/hr#hasEmployeeID",
+            "label": "has employee ID",
+            "pref_label": "has employee ID",
+            "alt_labels": [
+              "employee identifier"
+            ],
+            "hidden_labels": [
+              "emp_id",
+              "employee_id"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmployeeID"
+          },
+          {
+            "uri": "http://example.org/hr#hasSalary",
+            "label": "has salary",
+            "pref_label": "has salary",
+            "alt_labels": [
+              "earns"
+            ],
+            "hidden_labels": [
+              "sal",
+              "salary_amount"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+            "local_name": "hasSalary"
+          },
+          {
+            "uri": "http://example.org/hr#hasHireDate",
+            "label": "has hire date",
+            "pref_label": "has hire date",
+            "alt_labels": [
+              "start date"
+            ],
+            "hidden_labels": [
+              "hire_dt",
+              "start_dt"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#date",
+            "local_name": "hasHireDate"
+          },
+          {
+            "uri": "http://example.org/shared#hasFirstName",
+            "label": "has first name",
+            "pref_label": "has first name",
+            "alt_labels": [
+              "first name"
+            ],
+            "hidden_labels": [
+              "fname",
+              "first_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFirstName"
+          },
+          {
+            "uri": "http://example.org/shared#hasLastName",
+            "label": "has last name",
+            "pref_label": "has last name",
+            "alt_labels": [
+              "surname",
+              "family name"
+            ],
+            "hidden_labels": [
+              "lname",
+              "last_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasLastName"
+          },
+          {
+            "uri": "http://example.org/shared#hasFullName",
+            "label": "has full name",
+            "pref_label": "has full name",
+            "alt_labels": [
+              "name"
+            ],
+            "hidden_labels": [
+              "full_name",
+              "display_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFullName"
+          },
+          {
+            "uri": "http://example.org/shared#hasEmail",
+            "label": "has email address",
+            "pref_label": "has email address",
+            "alt_labels": [
+              "email"
+            ],
+            "hidden_labels": [
+              "email_addr",
+              "e_mail"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmail"
+          },
+          {
+            "uri": "http://example.org/shared#hasPhoneNumber",
+            "label": "has phone number",
+            "pref_label": "has phone number",
+            "alt_labels": [
+              "phone"
+            ],
+            "hidden_labels": [
+              "phone_num",
+              "tel"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasPhoneNumber"
+          }
+        ],
+        "object_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          }
+        ]
+      }
+    },
+    {
+      "column_name": "phone_num",
+      "sample_values": [
+        "555-0101",
+        "555-0102",
+        "555-0103",
+        "555-0104",
+        "555-0105"
+      ],
+      "inferred_datatype": "xsd:string",
+      "reason": "No matching property found in ontology",
+      "ontology_context": {
+        "target_class": {
+          "uri": "http://example.org/hr#Employee",
+          "label": "Employee",
+          "comment": "A person employed by the organization",
+          "local_name": "Employee",
+          "properties": [
+            {
+              "uri": "http://example.org/hr#hasEmployeeID",
+              "label": "has employee ID",
+              "pref_label": "has employee ID",
+              "alt_labels": [
+                "employee identifier"
+              ],
+              "hidden_labels": [
+                "emp_id",
+                "employee_id"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#string",
+              "local_name": "hasEmployeeID"
+            },
+            {
+              "uri": "http://example.org/hr#hasSalary",
+              "label": "has salary",
+              "pref_label": "has salary",
+              "alt_labels": [
+                "earns"
+              ],
+              "hidden_labels": [
+                "sal",
+                "salary_amount"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+              "local_name": "hasSalary"
+            },
+            {
+              "uri": "http://example.org/hr#hasHireDate",
+              "label": "has hire date",
+              "pref_label": "has hire date",
+              "alt_labels": [
+                "start date"
+              ],
+              "hidden_labels": [
+                "hire_dt",
+                "start_dt"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#date",
+              "local_name": "hasHireDate"
+            }
+          ]
+        },
+        "related_classes": [
+          {
+            "uri": "http://example.org/hr#Department",
+            "label": "Department",
+            "comment": "An organizational unit within the company",
+            "local_name": "Department",
+            "properties": []
+          },
+          {
+            "uri": "http://example.org/hr#Position",
+            "label": "Position",
+            "comment": "A job position within the organization",
+            "local_name": "Position",
+            "properties": []
+          }
+        ],
+        "all_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          },
+          {
+            "uri": "http://example.org/hr#hasEmployeeID",
+            "label": "has employee ID",
+            "pref_label": "has employee ID",
+            "alt_labels": [
+              "employee identifier"
+            ],
+            "hidden_labels": [
+              "emp_id",
+              "employee_id"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmployeeID"
+          },
+          {
+            "uri": "http://example.org/hr#hasSalary",
+            "label": "has salary",
+            "pref_label": "has salary",
+            "alt_labels": [
+              "earns"
+            ],
+            "hidden_labels": [
+              "sal",
+              "salary_amount"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+            "local_name": "hasSalary"
+          },
+          {
+            "uri": "http://example.org/hr#hasHireDate",
+            "label": "has hire date",
+            "pref_label": "has hire date",
+            "alt_labels": [
+              "start date"
+            ],
+            "hidden_labels": [
+              "hire_dt",
+              "start_dt"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#date",
+            "local_name": "hasHireDate"
+          },
+          {
+            "uri": "http://example.org/shared#hasFirstName",
+            "label": "has first name",
+            "pref_label": "has first name",
+            "alt_labels": [
+              "first name"
+            ],
+            "hidden_labels": [
+              "fname",
+              "first_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFirstName"
+          },
+          {
+            "uri": "http://example.org/shared#hasLastName",
+            "label": "has last name",
+            "pref_label": "has last name",
+            "alt_labels": [
+              "surname",
+              "family name"
+            ],
+            "hidden_labels": [
+              "lname",
+              "last_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasLastName"
+          },
+          {
+            "uri": "http://example.org/shared#hasFullName",
+            "label": "has full name",
+            "pref_label": "has full name",
+            "alt_labels": [
+              "name"
+            ],
+            "hidden_labels": [
+              "full_name",
+              "display_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFullName"
+          },
+          {
+            "uri": "http://example.org/shared#hasEmail",
+            "label": "has email address",
+            "pref_label": "has email address",
+            "alt_labels": [
+              "email"
+            ],
+            "hidden_labels": [
+              "email_addr",
+              "e_mail"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmail"
+          },
+          {
+            "uri": "http://example.org/shared#hasPhoneNumber",
+            "label": "has phone number",
+            "pref_label": "has phone number",
+            "alt_labels": [
+              "phone"
+            ],
+            "hidden_labels": [
+              "phone_num",
+              "tel"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasPhoneNumber"
+          }
+        ],
+        "object_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          }
+        ]
+      }
+    },
+    {
+      "column_name": "dept",
+      "sample_values": [
+        "Engineering",
+        "Marketing",
+        "Engineering",
+        "HR",
+        "Finance"
+      ],
+      "inferred_datatype": "xsd:string",
+      "reason": "No matching property found in ontology",
+      "ontology_context": {
+        "target_class": {
+          "uri": "http://example.org/hr#Employee",
+          "label": "Employee",
+          "comment": "A person employed by the organization",
+          "local_name": "Employee",
+          "properties": [
+            {
+              "uri": "http://example.org/hr#hasEmployeeID",
+              "label": "has employee ID",
+              "pref_label": "has employee ID",
+              "alt_labels": [
+                "employee identifier"
+              ],
+              "hidden_labels": [
+                "emp_id",
+                "employee_id"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#string",
+              "local_name": "hasEmployeeID"
+            },
+            {
+              "uri": "http://example.org/hr#hasSalary",
+              "label": "has salary",
+              "pref_label": "has salary",
+              "alt_labels": [
+                "earns"
+              ],
+              "hidden_labels": [
+                "sal",
+                "salary_amount"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+              "local_name": "hasSalary"
+            },
+            {
+              "uri": "http://example.org/hr#hasHireDate",
+              "label": "has hire date",
+              "pref_label": "has hire date",
+              "alt_labels": [
+                "start date"
+              ],
+              "hidden_labels": [
+                "hire_dt",
+                "start_dt"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#date",
+              "local_name": "hasHireDate"
+            }
+          ]
+        },
+        "related_classes": [
+          {
+            "uri": "http://example.org/hr#Department",
+            "label": "Department",
+            "comment": "An organizational unit within the company",
+            "local_name": "Department",
+            "properties": []
+          },
+          {
+            "uri": "http://example.org/hr#Position",
+            "label": "Position",
+            "comment": "A job position within the organization",
+            "local_name": "Position",
+            "properties": []
+          }
+        ],
+        "all_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          },
+          {
+            "uri": "http://example.org/hr#hasEmployeeID",
+            "label": "has employee ID",
+            "pref_label": "has employee ID",
+            "alt_labels": [
+              "employee identifier"
+            ],
+            "hidden_labels": [
+              "emp_id",
+              "employee_id"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmployeeID"
+          },
+          {
+            "uri": "http://example.org/hr#hasSalary",
+            "label": "has salary",
+            "pref_label": "has salary",
+            "alt_labels": [
+              "earns"
+            ],
+            "hidden_labels": [
+              "sal",
+              "salary_amount"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+            "local_name": "hasSalary"
+          },
+          {
+            "uri": "http://example.org/hr#hasHireDate",
+            "label": "has hire date",
+            "pref_label": "has hire date",
+            "alt_labels": [
+              "start date"
+            ],
+            "hidden_labels": [
+              "hire_dt",
+              "start_dt"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#date",
+            "local_name": "hasHireDate"
+          },
+          {
+            "uri": "http://example.org/shared#hasFirstName",
+            "label": "has first name",
+            "pref_label": "has first name",
+            "alt_labels": [
+              "first name"
+            ],
+            "hidden_labels": [
+              "fname",
+              "first_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFirstName"
+          },
+          {
+            "uri": "http://example.org/shared#hasLastName",
+            "label": "has last name",
+            "pref_label": "has last name",
+            "alt_labels": [
+              "surname",
+              "family name"
+            ],
+            "hidden_labels": [
+              "lname",
+              "last_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasLastName"
+          },
+          {
+            "uri": "http://example.org/shared#hasFullName",
+            "label": "has full name",
+            "pref_label": "has full name",
+            "alt_labels": [
+              "name"
+            ],
+            "hidden_labels": [
+              "full_name",
+              "display_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFullName"
+          },
+          {
+            "uri": "http://example.org/shared#hasEmail",
+            "label": "has email address",
+            "pref_label": "has email address",
+            "alt_labels": [
+              "email"
+            ],
+            "hidden_labels": [
+              "email_addr",
+              "e_mail"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmail"
+          },
+          {
+            "uri": "http://example.org/shared#hasPhoneNumber",
+            "label": "has phone number",
+            "pref_label": "has phone number",
+            "alt_labels": [
+              "phone"
+            ],
+            "hidden_labels": [
+              "phone_num",
+              "tel"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasPhoneNumber"
+          }
+        ],
+        "object_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          }
+        ]
+      }
+    },
+    {
+      "column_name": "active",
+      "sample_values": [
+        true,
+        true,
+        true,
+        true,
+        false
+      ],
+      "inferred_datatype": "xsd:boolean",
+      "reason": "No matching property found in ontology",
+      "ontology_context": {
+        "target_class": {
+          "uri": "http://example.org/hr#Employee",
+          "label": "Employee",
+          "comment": "A person employed by the organization",
+          "local_name": "Employee",
+          "properties": [
+            {
+              "uri": "http://example.org/hr#hasEmployeeID",
+              "label": "has employee ID",
+              "pref_label": "has employee ID",
+              "alt_labels": [
+                "employee identifier"
+              ],
+              "hidden_labels": [
+                "emp_id",
+                "employee_id"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#string",
+              "local_name": "hasEmployeeID"
+            },
+            {
+              "uri": "http://example.org/hr#hasSalary",
+              "label": "has salary",
+              "pref_label": "has salary",
+              "alt_labels": [
+                "earns"
+              ],
+              "hidden_labels": [
+                "sal",
+                "salary_amount"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+              "local_name": "hasSalary"
+            },
+            {
+              "uri": "http://example.org/hr#hasHireDate",
+              "label": "has hire date",
+              "pref_label": "has hire date",
+              "alt_labels": [
+                "start date"
+              ],
+              "hidden_labels": [
+                "hire_dt",
+                "start_dt"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#date",
+              "local_name": "hasHireDate"
+            }
+          ]
+        },
+        "related_classes": [
+          {
+            "uri": "http://example.org/hr#Department",
+            "label": "Department",
+            "comment": "An organizational unit within the company",
+            "local_name": "Department",
+            "properties": []
+          },
+          {
+            "uri": "http://example.org/hr#Position",
+            "label": "Position",
+            "comment": "A job position within the organization",
+            "local_name": "Position",
+            "properties": []
+          }
+        ],
+        "all_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          },
+          {
+            "uri": "http://example.org/hr#hasEmployeeID",
+            "label": "has employee ID",
+            "pref_label": "has employee ID",
+            "alt_labels": [
+              "employee identifier"
+            ],
+            "hidden_labels": [
+              "emp_id",
+              "employee_id"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmployeeID"
+          },
+          {
+            "uri": "http://example.org/hr#hasSalary",
+            "label": "has salary",
+            "pref_label": "has salary",
+            "alt_labels": [
+              "earns"
+            ],
+            "hidden_labels": [
+              "sal",
+              "salary_amount"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+            "local_name": "hasSalary"
+          },
+          {
+            "uri": "http://example.org/hr#hasHireDate",
+            "label": "has hire date",
+            "pref_label": "has hire date",
+            "alt_labels": [
+              "start date"
+            ],
+            "hidden_labels": [
+              "hire_dt",
+              "start_dt"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#date",
+            "local_name": "hasHireDate"
+          },
+          {
+            "uri": "http://example.org/shared#hasFirstName",
+            "label": "has first name",
+            "pref_label": "has first name",
+            "alt_labels": [
+              "first name"
+            ],
+            "hidden_labels": [
+              "fname",
+              "first_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFirstName"
+          },
+          {
+            "uri": "http://example.org/shared#hasLastName",
+            "label": "has last name",
+            "pref_label": "has last name",
+            "alt_labels": [
+              "surname",
+              "family name"
+            ],
+            "hidden_labels": [
+              "lname",
+              "last_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasLastName"
+          },
+          {
+            "uri": "http://example.org/shared#hasFullName",
+            "label": "has full name",
+            "pref_label": "has full name",
+            "alt_labels": [
+              "name"
+            ],
+            "hidden_labels": [
+              "full_name",
+              "display_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFullName"
+          },
+          {
+            "uri": "http://example.org/shared#hasEmail",
+            "label": "has email address",
+            "pref_label": "has email address",
+            "alt_labels": [
+              "email"
+            ],
+            "hidden_labels": [
+              "email_addr",
+              "e_mail"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmail"
+          },
+          {
+            "uri": "http://example.org/shared#hasPhoneNumber",
+            "label": "has phone number",
+            "pref_label": "has phone number",
+            "alt_labels": [
+              "phone"
+            ],
+            "hidden_labels": [
+              "phone_num",
+              "tel"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasPhoneNumber"
+          }
+        ],
+        "object_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          }
+        ]
+      }
+    },
+    {
+      "column_name": "position_title",
+      "sample_values": [
+        "Software Engineer",
+        "Marketing Manager",
+        "Senior Developer",
+        "HR Specialist",
+        "Financial Analyst"
+      ],
+      "inferred_datatype": "xsd:string",
+      "reason": "No matching property found in ontology",
+      "ontology_context": {
+        "target_class": {
+          "uri": "http://example.org/hr#Employee",
+          "label": "Employee",
+          "comment": "A person employed by the organization",
+          "local_name": "Employee",
+          "properties": [
+            {
+              "uri": "http://example.org/hr#hasEmployeeID",
+              "label": "has employee ID",
+              "pref_label": "has employee ID",
+              "alt_labels": [
+                "employee identifier"
+              ],
+              "hidden_labels": [
+                "emp_id",
+                "employee_id"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#string",
+              "local_name": "hasEmployeeID"
+            },
+            {
+              "uri": "http://example.org/hr#hasSalary",
+              "label": "has salary",
+              "pref_label": "has salary",
+              "alt_labels": [
+                "earns"
+              ],
+              "hidden_labels": [
+                "sal",
+                "salary_amount"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+              "local_name": "hasSalary"
+            },
+            {
+              "uri": "http://example.org/hr#hasHireDate",
+              "label": "has hire date",
+              "pref_label": "has hire date",
+              "alt_labels": [
+                "start date"
+              ],
+              "hidden_labels": [
+                "hire_dt",
+                "start_dt"
+              ],
+              "comment": null,
+              "domain_class": "http://example.org/hr#Employee",
+              "range_type": "http://www.w3.org/2001/XMLSchema#date",
+              "local_name": "hasHireDate"
+            }
+          ]
+        },
+        "related_classes": [
+          {
+            "uri": "http://example.org/hr#Department",
+            "label": "Department",
+            "comment": "An organizational unit within the company",
+            "local_name": "Department",
+            "properties": []
+          },
+          {
+            "uri": "http://example.org/hr#Position",
+            "label": "Position",
+            "comment": "A job position within the organization",
+            "local_name": "Position",
+            "properties": []
+          }
+        ],
+        "all_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          },
+          {
+            "uri": "http://example.org/hr#hasEmployeeID",
+            "label": "has employee ID",
+            "pref_label": "has employee ID",
+            "alt_labels": [
+              "employee identifier"
+            ],
+            "hidden_labels": [
+              "emp_id",
+              "employee_id"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmployeeID"
+          },
+          {
+            "uri": "http://example.org/hr#hasSalary",
+            "label": "has salary",
+            "pref_label": "has salary",
+            "alt_labels": [
+              "earns"
+            ],
+            "hidden_labels": [
+              "sal",
+              "salary_amount"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+            "local_name": "hasSalary"
+          },
+          {
+            "uri": "http://example.org/hr#hasHireDate",
+            "label": "has hire date",
+            "pref_label": "has hire date",
+            "alt_labels": [
+              "start date"
+            ],
+            "hidden_labels": [
+              "hire_dt",
+              "start_dt"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#date",
+            "local_name": "hasHireDate"
+          },
+          {
+            "uri": "http://example.org/shared#hasFirstName",
+            "label": "has first name",
+            "pref_label": "has first name",
+            "alt_labels": [
+              "first name"
+            ],
+            "hidden_labels": [
+              "fname",
+              "first_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFirstName"
+          },
+          {
+            "uri": "http://example.org/shared#hasLastName",
+            "label": "has last name",
+            "pref_label": "has last name",
+            "alt_labels": [
+              "surname",
+              "family name"
+            ],
+            "hidden_labels": [
+              "lname",
+              "last_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasLastName"
+          },
+          {
+            "uri": "http://example.org/shared#hasFullName",
+            "label": "has full name",
+            "pref_label": "has full name",
+            "alt_labels": [
+              "name"
+            ],
+            "hidden_labels": [
+              "full_name",
+              "display_name"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasFullName"
+          },
+          {
+            "uri": "http://example.org/shared#hasEmail",
+            "label": "has email address",
+            "pref_label": "has email address",
+            "alt_labels": [
+              "email"
+            ],
+            "hidden_labels": [
+              "email_addr",
+              "e_mail"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasEmail"
+          },
+          {
+            "uri": "http://example.org/shared#hasPhoneNumber",
+            "label": "has phone number",
+            "pref_label": "has phone number",
+            "alt_labels": [
+              "phone"
+            ],
+            "hidden_labels": [
+              "phone_num",
+              "tel"
+            ],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "hasPhoneNumber"
+          }
+        ],
+        "object_properties": [
+          {
+            "uri": "http://example.org/hr#worksInDepartment",
+            "label": "works in department",
+            "pref_label": "works in department",
+            "alt_labels": [
+              "assigned to department"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Department",
+            "local_name": "worksInDepartment"
+          },
+          {
+            "uri": "http://example.org/hr#holdsPosition",
+            "label": "holds position",
+            "pref_label": "holds position",
+            "alt_labels": [
+              "has job title"
+            ],
+            "hidden_labels": [],
+            "comment": null,
+            "domain_class": null,
+            "range_type": "http://example.org/hr#Position",
+            "local_name": "holdsPosition"
+          }
+        ]
+      }
+    }
+  ],
+  "weak_matches": [],
+  "skos_enrichment_suggestions": [],
+  "ontology_context": {
+    "target_class": {
+      "uri": "http://example.org/hr#Employee",
+      "label": "Employee",
+      "comment": "A person employed by the organization",
+      "local_name": "Employee",
+      "properties": [
+        {
+          "uri": "http://example.org/hr#hasEmployeeID",
+          "label": "has employee ID",
+          "pref_label": "has employee ID",
+          "alt_labels": [
+            "employee identifier"
+          ],
+          "hidden_labels": [
+            "emp_id",
+            "employee_id"
+          ],
+          "comment": null,
+          "domain_class": "http://example.org/hr#Employee",
+          "range_type": "http://www.w3.org/2001/XMLSchema#string",
+          "local_name": "hasEmployeeID"
+        },
+        {
+          "uri": "http://example.org/hr#hasSalary",
+          "label": "has salary",
+          "pref_label": "has salary",
+          "alt_labels": [
+            "earns"
+          ],
+          "hidden_labels": [
+            "sal",
+            "salary_amount"
+          ],
+          "comment": null,
+          "domain_class": "http://example.org/hr#Employee",
+          "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+          "local_name": "hasSalary"
+        },
+        {
+          "uri": "http://example.org/hr#hasHireDate",
+          "label": "has hire date",
+          "pref_label": "has hire date",
+          "alt_labels": [
+            "start date"
+          ],
+          "hidden_labels": [
+            "hire_dt",
+            "start_dt"
+          ],
+          "comment": null,
+          "domain_class": "http://example.org/hr#Employee",
+          "range_type": "http://www.w3.org/2001/XMLSchema#date",
+          "local_name": "hasHireDate"
+        }
+      ]
+    },
+    "related_classes": [
+      {
+        "uri": "http://example.org/hr#Department",
+        "label": "Department",
+        "comment": "An organizational unit within the company",
+        "local_name": "Department",
+        "properties": []
+      },
+      {
+        "uri": "http://example.org/hr#Position",
+        "label": "Position",
+        "comment": "A job position within the organization",
+        "local_name": "Position",
+        "properties": []
+      }
+    ],
+    "all_properties": [
+      {
+        "uri": "http://example.org/hr#worksInDepartment",
+        "label": "works in department",
+        "pref_label": "works in department",
+        "alt_labels": [
+          "assigned to department"
+        ],
+        "hidden_labels": [],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://example.org/hr#Department",
+        "local_name": "worksInDepartment"
+      },
+      {
+        "uri": "http://example.org/hr#holdsPosition",
+        "label": "holds position",
+        "pref_label": "holds position",
+        "alt_labels": [
+          "has job title"
+        ],
+        "hidden_labels": [],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://example.org/hr#Position",
+        "local_name": "holdsPosition"
+      },
+      {
+        "uri": "http://example.org/hr#hasEmployeeID",
+        "label": "has employee ID",
+        "pref_label": "has employee ID",
+        "alt_labels": [
+          "employee identifier"
+        ],
+        "hidden_labels": [
+          "emp_id",
+          "employee_id"
+        ],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "hasEmployeeID"
+      },
+      {
+        "uri": "http://example.org/hr#hasSalary",
+        "label": "has salary",
+        "pref_label": "has salary",
+        "alt_labels": [
+          "earns"
+        ],
+        "hidden_labels": [
+          "sal",
+          "salary_amount"
+        ],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+        "local_name": "hasSalary"
+      },
+      {
+        "uri": "http://example.org/hr#hasHireDate",
+        "label": "has hire date",
+        "pref_label": "has hire date",
+        "alt_labels": [
+          "start date"
+        ],
+        "hidden_labels": [
+          "hire_dt",
+          "start_dt"
+        ],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#date",
+        "local_name": "hasHireDate"
+      },
+      {
+        "uri": "http://example.org/shared#hasFirstName",
+        "label": "has first name",
+        "pref_label": "has first name",
+        "alt_labels": [
+          "first name"
+        ],
+        "hidden_labels": [
+          "fname",
+          "first_name"
+        ],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "hasFirstName"
+      },
+      {
+        "uri": "http://example.org/shared#hasLastName",
+        "label": "has last name",
+        "pref_label": "has last name",
+        "alt_labels": [
+          "surname",
+          "family name"
+        ],
+        "hidden_labels": [
+          "lname",
+          "last_name"
+        ],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "hasLastName"
+      },
+      {
+        "uri": "http://example.org/shared#hasFullName",
+        "label": "has full name",
+        "pref_label": "has full name",
+        "alt_labels": [
+          "name"
+        ],
+        "hidden_labels": [
+          "full_name",
+          "display_name"
+        ],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "hasFullName"
+      },
+      {
+        "uri": "http://example.org/shared#hasEmail",
+        "label": "has email address",
+        "pref_label": "has email address",
+        "alt_labels": [
+          "email"
+        ],
+        "hidden_labels": [
+          "email_addr",
+          "e_mail"
+        ],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "hasEmail"
+      },
+      {
+        "uri": "http://example.org/shared#hasPhoneNumber",
+        "label": "has phone number",
+        "pref_label": "has phone number",
+        "alt_labels": [
+          "phone"
+        ],
+        "hidden_labels": [
+          "phone_num",
+          "tel"
+        ],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "hasPhoneNumber"
+      }
+    ],
+    "object_properties": [
+      {
+        "uri": "http://example.org/hr#worksInDepartment",
+        "label": "works in department",
+        "pref_label": "works in department",
+        "alt_labels": [
+          "assigned to department"
+        ],
+        "hidden_labels": [],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://example.org/hr#Department",
+        "local_name": "worksInDepartment"
+      },
+      {
+        "uri": "http://example.org/hr#holdsPosition",
+        "label": "holds position",
+        "pref_label": "holds position",
+        "alt_labels": [
+          "has job title"
+        ],
+        "hidden_labels": [],
+        "comment": null,
+        "domain_class": null,
+        "range_type": "http://example.org/hr#Position",
+        "local_name": "holdsPosition"
+      }
+    ]
+  }
+}

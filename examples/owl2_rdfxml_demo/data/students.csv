@@ -1,0 +1,32 @@
+student_id,first_name,last_name,middle_initial,email_address,phone_number,gpa,enrollment_date,academic_status,department_code,course_code,course_title,grade,semester
+S001,Alice,Johnson,M,alice.johnson@university.edu,555-0101,3.75,2023-08-20,Active,CS,CS101,Introduction to Computer Science,A,Fall2025
+S001,Alice,Johnson,M,alice.johnson@university.edu,555-0101,3.75,2023-08-20,Active,CS,MATH201,Calculus II,B+,Fall2025
+S002,Bob,Smith,,bob.smith@university.edu,555-0102,3.25,2023-08-20,Active,ENG,ENG101,English Composition,B,Fall2025
+S002,Bob,Smith,,bob.smith@university.edu,555-0102,3.25,2023-08-20,Active,ENG,HIST150,World History,A-,Fall2025
+S003,Carol,Williams,J,carol.williams@university.edu,555-0103,3.90,2022-08-22,Active,BIO,BIO101,General Biology,A,Fall2025
+S003,Carol,Williams,J,carol.williams@university.edu,555-0103,3.90,2022-08-22,Active,BIO,CHEM101,General Chemistry,A-,Fall2025
+S004,David,Brown,,david.brown@university.edu,555-0104,2.80,2024-01-15,Active,PSYC,PSYC101,Introduction to Psychology,B-,Spring2025
+S004,David,Brown,,david.brown@university.edu,555-0104,2.80,2024-01-15,Active,PSYC,SOC101,Introduction to Sociology,B,Spring2025
+S005,Emma,Davis,K,emma.davis@university.edu,555-0105,3.60,2023-08-20,Active,PHYS,PHYS101,General Physics I,B+,Fall2025
+S005,Emma,Davis,K,emma.davis@university.edu,555-0105,3.60,2023-08-20,Active,PHYS,MATH301,Advanced Calculus,A-,Fall2025
+S006,Frank,Miller,,frank.miller@university.edu,555-0106,3.40,2022-08-22,Active,ECON,ECON101,Principles of Economics,B+,Fall2025
+S006,Frank,Miller,,frank.miller@university.edu,555-0106,3.40,2022-08-22,Active,ECON,STAT200,Statistics,B,Fall2025
+S007,Grace,Wilson,L,grace.wilson@university.edu,555-0107,3.85,2021-08-23,Active,ART,ART101,Introduction to Art,A,Fall2025
+S007,Grace,Wilson,L,grace.wilson@university.edu,555-0107,3.85,2021-08-23,Active,ART,ART250,Art History,A-,Fall2025
+S008,Henry,Moore,,henry.moore@university.edu,555-0108,3.20,2024-01-15,Active,MUS,MUS101,Music Theory,B,Spring2025
+S008,Henry,Moore,,henry.moore@university.edu,555-0108,3.20,2024-01-15,Active,MUS,MUS150,Music History,B+,Spring2025
+S009,Isabella,Taylor,M,isabella.taylor@university.edu,555-0109,3.50,2023-08-20,Active,PHIL,PHIL101,Introduction to Philosophy,B+,Fall2025
+S009,Isabella,Taylor,M,isabella.taylor@university.edu,555-0109,3.50,2023-08-20,Active,PHIL,PHIL250,Ethics,A-,Fall2025
+S010,Jack,Anderson,,jack.anderson@university.edu,555-0110,3.95,2021-08-23,Active,CS,CS201,Data Structures,A,Fall2025
+S010,Jack,Anderson,,jack.anderson@university.edu,555-0110,3.95,2021-08-23,Active,CS,CS301,Algorithms,A,Fall2025
+S011,Katherine,Thomas,R,katherine.thomas@university.edu,555-0111,3.70,2022-08-22,Active,CHEM,CHEM201,Organic Chemistry,A-,Fall2025
+S011,Katherine,Thomas,R,katherine.thomas@university.edu,555-0111,3.70,2022-08-22,Active,CHEM,BIO201,Molecular Biology,B+,Fall2025
+S012,Liam,Jackson,,liam.jackson@university.edu,555-0112,2.90,2024-08-19,Active,GEOL,GEOL101,Physical Geology,B-,Fall2025
+S012,Liam,Jackson,,liam.jackson@university.edu,555-0112,2.90,2024-08-19,Active,GEOL,GEOL150,Earth Science,B,Fall2025
+S013,Maya,White,S,maya.white@university.edu,555-0113,3.80,2023-01-16,Active,POLI,POLI101,American Government,A-,Spring2025
+S013,Maya,White,S,maya.white@university.edu,555-0113,3.80,2023-01-16,Active,POLI,POLI200,Comparative Politics,B+,Spring2025
+S014,Nathan,Harris,,nathan.harris@university.edu,555-0114,3.30,2022-01-17,Active,ANTH,ANTH101,Cultural Anthropology,B+,Spring2025
+S014,Nathan,Harris,,nathan.harris@university.edu,555-0114,3.30,2022-01-17,Active,ANTH,ANTH200,Archaeology,B,Spring2025
+S015,Olivia,Martin,T,olivia.martin@university.edu,555-0115,3.55,2023-08-20,Active,LANG,SPAN101,Spanish I,A-,Fall2025
+S015,Olivia,Martin,T,olivia.martin@university.edu,555-0115,3.55,2023-08-20,Active,LANG,FREN101,French I,B+,Fall2025
+

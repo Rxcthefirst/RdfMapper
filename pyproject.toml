@@ -5,21 +5,30 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rdfmap"
 version = "0.1.0"
-description = "Convert spreadsheet data to RDF triples aligned with ontologies"
+description = "Convert tabular data (CSV, Excel, JSON, XML) to RDF triples aligned with OWL ontologies using SKOS-based semantic mapping"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
-    {name = "Enterprise Data Engineering", email = "your-email@example.com"}
+    {name = "RDFMap Contributors", email = "rxcthefirst@gmail.com"}
 ]
-keywords = ["rdf", "ontology", "semantic-web", "knowledge-graph", "owl", "shacl", "linked-data", "data-conversion"]
+maintainers = [
+    {name = "RDFMap Team", email = "rxcthefirst@gmail.com"}
+]
+keywords = [
+    "rdf", "ontology", "semantic-web", "knowledge-graph", "owl", "shacl",
+    "linked-data", "data-conversion", "skos", "owl2", "ttl", "json-ld",
+    "csv-to-rdf", "excel-to-rdf", "json-to-rdf", "xml-to-rdf",
+    "semantic-mapping", "ontology-alignment", "data-integration"
+]
+
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Information Analysis",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "License :: OSI Approved :: MIT License",
+
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -40,10 +49,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/SemanticModelDataMapper"
-Documentation = "https://github.com/your-username/SemanticModelDataMapper#readme"
-Repository = "https://github.com/your-username/SemanticModelDataMapper"
-Issues = "https://github.com/your-username/SemanticModelDataMapper/issues"
+Homepage = "https://github.com/rdfmap/rdfmap"
+Documentation = "https://rdfmap.readthedocs.io/"
+Repository = "https://github.com/rdfmap/rdfmap"
+Issues = "https://github.com/rdfmap/rdfmap/issues"
+Changelog = "https://github.com/rdfmap/rdfmap/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

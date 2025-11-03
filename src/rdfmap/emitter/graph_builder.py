@@ -5,11 +5,11 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from rdflib import Graph, Literal, Namespace, RDF, URIRef
-from rdflib.namespace import XSD
+from rdflib.namespace import OWL
 
 from ..iri.generator import IRITemplate, curie_to_iri
 from ..models.errors import ErrorSeverity, ProcessingReport
-from ..models.mapping import ColumnMapping, LinkedObject, MappingConfig, SheetMapping
+from ..models.mapping import ColumnMapping, MappingConfig, SheetMapping
 from ..transforms.functions import apply_transform
 from ..validator.datatypes import validate_datatype
 
@@ -184,7 +184,9 @@ class RDFGraphBuilder:
         try:
             # Build context from row data
             context = row.to_dict()
-            iri_str = template.render(context)
+
+            # Custom template rendering to handle dotted keys
+            iri_str = self._render_template_with_dotted_keys(template.template, context, template.base_iri)
             iri_ref = URIRef(iri_str)
             
             # Track IRI for duplicate detection
@@ -234,7 +236,10 @@ class RDFGraphBuilder:
         if not resource:
             return None
         
-        # Add rdf:type
+        # Add OWL2 NamedIndividual declaration (OWL2 best practice)
+        self.graph.add((resource, RDF.type, OWL.NamedIndividual))
+
+        # Add rdf:type for the domain class
         class_uri = self._resolve_class(sheet.row_resource.class_type)
         self.graph.add((resource, RDF.type, class_uri))
         
@@ -326,6 +331,9 @@ class RDFGraphBuilder:
             predicate = self._resolve_property(obj_config.predicate)
             self.graph.add((main_resource, predicate, obj_resource))
             
+            # Add OWL2 NamedIndividual declaration (OWL2 best practice)
+            self.graph.add((obj_resource, RDF.type, OWL.NamedIndividual))
+
             # Add object type
             obj_class = self._resolve_class(obj_config.class_type)
             self.graph.add((obj_resource, RDF.type, obj_class))
@@ -401,6 +409,45 @@ class RDFGraphBuilder:
             RDF Graph
         """
         return self.graph
+
+    def _render_template_with_dotted_keys(self, template: str, context: dict, base_iri: str) -> str:
+        """Render template with support for dotted keys.
+
+        Args:
+            template: Template string with {variable} placeholders
+            context: Dictionary with potentially dotted keys
+            base_iri: Base IRI value
+
+        Returns:
+            Rendered template string
+        """
+        import re
+
+        # Add base_iri to context
+        full_context = {"base_iri": base_iri, **context}
+
+        # Find all template variables
+        pattern = r'\{([^}]+)\}'
+        variables = re.findall(pattern, template)
+
+        # Replace each variable
+        result = template
+        for var in variables:
+            if var in full_context:
+                # Direct match
+                value = str(full_context[var])
+            else:
+                # Check if any key matches the variable
+                matching_keys = [k for k in full_context.keys() if k == var]
+                if matching_keys:
+                    value = str(full_context[matching_keys[0]])
+                else:
+                    raise ValueError(f"Variable not found in context: '{var}'")
+
+            # Replace the variable in the template
+            result = result.replace(f'{{{var}}}', value)
+
+        return result
 
 
 def serialize_graph(graph: Graph, format: str, output_path: Optional[Path] = None) -> str:

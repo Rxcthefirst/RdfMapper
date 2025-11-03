@@ -1,40 +1,57 @@
-# Semantic Model Data Mapper
+# RDFMap - Semantic Model Data Mapper
 
-A Python application for converting spreadsheet data (CSV/XLSX) into RDF triples aligned with ontologies, using declarative mapping configurations.
+Convert tabular and structured data (CSV, Excel, JSON, XML) into RDF triples aligned with OWL ontologies using intelligent SKOS-based semantic mapping.
 
-## Features
+## ✨ Features
 
-- **Multi-format Input**: CSV and XLSX (single/multiple sheets)
-- **Ontology-Driven**: Align data to OWL/RDF ontologies with full namespace support
-- **Configuration-Based**: YAML/JSON mapping files for flexible column-to-property mappings
+### 📊 **Multi-Format Data Sources**
+- **CSV/TSV**: Standard delimited files with configurable separators
+- **Excel (XLSX)**: Multi-sheet workbooks with automatic type detection
+- **JSON**: Complex nested structures with array expansion
+- **XML**: Structured documents with namespace support
+
+### 🧠 **Intelligent Semantic Mapping**
+- **SKOS-Based Matching**: Automatic column-to-property alignment using SKOS labels
+- **Ontology Imports**: Modular ontology architecture with `--import` flag
+- **Semantic Alignment Reports**: Confidence scoring and mapping quality metrics
+- **OWL2 Best Practices**: NamedIndividual declarations and standards compliance
+
+### 🛠 **Advanced Processing**
 - **IRI Templating**: Deterministic, idempotent IRI construction
-- **Data Transformation**: Type casting, normalization, value transforms, controlled vocabularies
+- **Data Transformation**: Type casting, normalization, value transforms
+- **Array Expansion**: Complex nested JSON array processing
 - **Object Linking**: Cross-sheet joins and multi-valued cell unpacking
-- **Multiple Output Formats**: Turtle, JSON-LD, N-Triples
-- **SHACL Validation**: Validate generated RDF against shapes with detailed reports
-- **Robust Error Handling**: Row-level error reporting with summary metrics
-- **Performance**: Streaming support for 100k+ row datasets
 
-## Installation
+### 📋 **Enterprise Features**
+- **Multiple Output Formats**: Turtle, RDF/XML, JSON-LD, N-Triples
+- **SHACL Validation**: Validate generated RDF against ontology shapes
+- **Batch Processing**: Handle 100k+ row datasets efficiently
+- **Error Reporting**: Comprehensive validation and processing reports
+
+## 🚀 Installation
 
 ### Requirements
-- Python 3.11+
+- Python 3.11+ (recommended: Python 3.13)
 
-### Setup
+### Install from PyPI
 
 ```bash
-# Clone or navigate to the project
-cd SemanticModelDataMapper
+pip install rdfmap
+```
+
+### Development Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/rdfmap/rdfmap.git
+cd rdfmap
 
 # Create virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
-
 # Install in development mode
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ## Quick Start

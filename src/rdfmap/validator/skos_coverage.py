@@ -5,10 +5,8 @@ identify properties missing labels, and suggest improvements for
 better semantic alignment.
 """
 
-from typing import Dict, List, Optional, Set, Tuple
-from collections import defaultdict
-from rdflib import Graph, Namespace, URIRef
-from rdflib.namespace import RDF, RDFS, OWL, SKOS
+from typing import List, Optional, Set
+from rdflib import Graph, URIRef
 from pydantic import BaseModel, Field
 
 
@@ -231,16 +229,16 @@ class SKOSCoverageValidator:
         # Check SKOS labels
         pref_labels = list(self.graph.objects(prop_uri_ref, SKOS.prefLabel))
         coverage.pref_labels = [str(l) for l in pref_labels]
-        coverage.has_pref_label = len(pref_labels) > 0
-        
+        coverage.pref_labels = [str(label) for label in pref_labels]
+
         alt_labels = list(self.graph.objects(prop_uri_ref, SKOS.altLabel))
         coverage.alt_labels = [str(l) for l in alt_labels]
-        coverage.has_alt_labels = len(alt_labels) > 0
-        
+        coverage.alt_labels = [str(label) for label in alt_labels]
+
         hidden_labels = list(self.graph.objects(prop_uri_ref, SKOS.hiddenLabel))
         coverage.hidden_labels = [str(l) for l in hidden_labels]
-        coverage.has_hidden_labels = len(hidden_labels) > 0
-        
+        coverage.hidden_labels = [str(label) for label in hidden_labels]
+
         coverage.total_skos_labels = (
             len(pref_labels) + len(alt_labels) + len(hidden_labels)
         )

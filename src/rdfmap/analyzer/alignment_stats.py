@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict, Counter
 from pydantic import BaseModel, Field
 
-from ..models.alignment import AlignmentReport, MatchType, ConfidenceLevel
+from ..models.alignment import AlignmentReport
 
 
 class ColumnStats(BaseModel):

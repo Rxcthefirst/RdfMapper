@@ -345,8 +345,8 @@ class TestMatchingPriority:
         properties = ontology.get_datatype_properties(employee_uri)
         
         # Get column analysis
-        col_analysis = generator.spreadsheet.get_analysis("fname")
-        
+        col_analysis = generator.data_source.get_analysis("fname")
+
         # Test matching (returns tuple: property, match_type, matched_via)
         match_result = generator._match_column_to_property("fname", col_analysis, properties)
         
@@ -383,9 +383,9 @@ class TestDataTypeInference:
         if "hire_dt" in columns and "datatype" in columns["hire_dt"]:
             assert "date" in columns["hire_dt"]["datatype"].lower()
         
-        # active should be string (Yes/No values in CSV)
+        # active should be boolean (Yes/No values in CSV are now correctly detected as boolean)
         if "active" in columns and "datatype" in columns["active"]:
-            assert "string" in columns["active"]["datatype"].lower()
+            assert "boolean" in columns["active"]["datatype"].lower()
 
 
 class TestErrorHandling:

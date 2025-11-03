@@ -6,7 +6,6 @@ from typing import Optional
 
 from pyshacl import validate
 from rdflib import Graph, RDF, RDFS, OWL
-from rdflib.namespace import Namespace
 
 from ..models.errors import ValidationReport, ValidationResult
 
@@ -68,7 +67,7 @@ def _parse_validation_results(results_graph: Graph) -> list[ValidationResult]:
     Returns:
         List of validation results
     """
-    from rdflib import RDF, Namespace
+    from rdflib import RDF
     from rdflib.namespace import SH
     
     results = []

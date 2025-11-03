@@ -1,9 +1,8 @@
 """Spreadsheet analyzer for extracting column patterns and data types."""
 
-from typing import Dict, List, Set, Optional, Tuple, Any
+from typing import Dict, List, Optional, Any
 from pathlib import Path
 import pandas as pd
-from collections import Counter
 import re
 
 

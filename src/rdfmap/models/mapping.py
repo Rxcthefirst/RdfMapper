@@ -1,7 +1,6 @@
 """Pydantic models for mapping configuration schema."""
 
 from enum import Enum
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -143,6 +142,9 @@ class MappingConfig(BaseModel):
 
     namespaces: Dict[str, str] = Field(
         ..., description="Namespace prefix to IRI mappings"
+    )
+    imports: Optional[List[str]] = Field(
+        None, description="List of ontology files to import (file paths or URIs)"
     )
     defaults: DefaultsConfig = Field(..., description="Default configuration values")
     sheets: List[SheetMapping] = Field(..., description="Sheet/file mappings")

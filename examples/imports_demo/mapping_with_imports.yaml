@@ -1,0 +1,74 @@
+namespaces:
+  brick: https://brickschema.org/schema/Brick#
+  csvw: http://www.w3.org/ns/csvw#
+  dc: http://purl.org/dc/elements/1.1/
+  dcat: http://www.w3.org/ns/dcat#
+  dcmitype: http://purl.org/dc/dcmitype/
+  dcterms: http://purl.org/dc/terms/
+  dcam: http://purl.org/dc/dcam/
+  doap: http://usefulinc.com/ns/doap#
+  foaf: http://xmlns.com/foaf/0.1/
+  geo: http://www.opengis.net/ont/geosparql#
+  odrl: http://www.w3.org/ns/odrl/2/
+  org: http://www.w3.org/ns/org#
+  prof: http://www.w3.org/ns/dx/prof/
+  prov: http://www.w3.org/ns/prov#
+  qb: http://purl.org/linked-data/cube#
+  schema: https://schema.org/
+  sh: http://www.w3.org/ns/shacl#
+  skos: http://www.w3.org/2004/02/skos/core#
+  sosa: http://www.w3.org/ns/sosa/
+  ssn: http://www.w3.org/ns/ssn/
+  time: http://www.w3.org/2006/time#
+  vann: http://purl.org/vocab/vann/
+  void: http://rdfs.org/ns/void#
+  wgs: https://www.w3.org/2003/01/geo/wgs84_pos#
+  owl: http://www.w3.org/2002/07/owl#
+  rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  xsd: http://www.w3.org/2001/XMLSchema#
+  xml: http://www.w3.org/XML/1998/namespace
+  hr: http://example.org/hr#
+  shared: http://example.org/shared#
+defaults:
+  base_iri: http://example.org/
+sheets:
+- name: employees_with_imports
+  source: ./employees_with_imports.csv
+  row_resource:
+    class: hr:Employee
+    iri_template: employee:{employee_id}
+  columns:
+    employee_id:
+      as: hr:hasEmployeeID
+      datatype: xsd:string
+      required: true
+    first_name:
+      as: shared:hasFirstName
+      datatype: xsd:string
+    last_name:
+      as: shared:hasLastName
+      datatype: xsd:string
+    full_name:
+      as: shared:hasFullName
+      datatype: xsd:string
+    email_addr:
+      as: shared:hasEmail
+      datatype: xsd:string
+    phone_num:
+      as: shared:hasPhoneNumber
+      datatype: xsd:string
+    salary_amount:
+      as: hr:hasSalary
+      datatype: xsd:decimal
+    hire_dt:
+      as: hr:hasHireDate
+      datatype: xsd:date
+    active:
+      as: shared:isActive
+      datatype: xsd:boolean
+options:
+  on_error: report
+  skip_empty_values: true
+imports:
+- examples/imports_demo/shared_ontology_fixed.ttl

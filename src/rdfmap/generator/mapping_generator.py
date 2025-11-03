@@ -1,14 +1,15 @@
-"""Mapping configuration generator combining ontology and spreadsheet analysis."""
+"""Mapping configuration generator combining ontology and data source analysis."""
 
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 import os
 import yaml
 import json
+from difflib import SequenceMatcher
 from pydantic import BaseModel, Field
 
 from .ontology_analyzer import OntologyAnalyzer, OntologyClass, OntologyProperty
-from .spreadsheet_analyzer import SpreadsheetAnalyzer, ColumnAnalysis
+from .data_analyzer import DataSourceAnalyzer, DataFieldAnalysis
 from ..models.alignment import (
     AlignmentReport,
     AlignmentStatistics,
@@ -25,6 +26,9 @@ class GeneratorConfig(BaseModel):
     """Configuration for the mapping generator."""
     
     base_iri: str = Field(..., description="Base IRI for generated resources")
+    imports: Optional[List[str]] = Field(
+        None, description="List of ontology files to import (file paths or URIs)"
+    )
     default_class_prefix: str = Field("resource", description="Default prefix for resource IRIs")
     include_comments: bool = Field(True, description="Include comments in generated config")
     auto_detect_relationships: bool = Field(
@@ -36,12 +40,12 @@ class GeneratorConfig(BaseModel):
 
 
 class MappingGenerator:
-    """Generates mapping configuration from ontology and spreadsheet analysis."""
-    
+    """Generates mapping configuration from ontology and data source analysis (CSV, XLSX, JSON, XML)."""
+
     def __init__(
         self,
         ontology_file: str,
-        spreadsheet_file: str,
+        data_file: str,
         config: GeneratorConfig,
     ):
         """
@@ -49,15 +53,15 @@ class MappingGenerator:
         
         Args:
             ontology_file: Path to ontology file
-            spreadsheet_file: Path to spreadsheet file
+            data_file: Path to data file (CSV, XLSX, JSON, or XML)
             config: Generator configuration
         """
         self.config = config
         self.ontology_file = ontology_file
-        self.spreadsheet_file = spreadsheet_file
-        self.ontology = OntologyAnalyzer(ontology_file)
-        self.spreadsheet = SpreadsheetAnalyzer(spreadsheet_file)
-        
+        self.data_file = data_file
+        self.ontology = OntologyAnalyzer(ontology_file, imports=config.imports)
+        self.data_source = DataSourceAnalyzer(data_file)
+
         self.mapping: Dict[str, Any] = {}
         self.alignment_report: Optional[AlignmentReport] = None
         
@@ -101,6 +105,10 @@ class MappingGenerator:
             "options": self._generate_options(),
         }
         
+        # Add imports if specified
+        if self.config.imports:
+            self.mapping["imports"] = self.config.imports
+
         return self.mapping
     
     def _resolve_class(self, identifier: str) -> Optional[OntologyClass]:
@@ -120,8 +128,8 @@ class MappingGenerator:
     def _auto_detect_class(self) -> Optional[OntologyClass]:
         """Attempt to auto-detect the target class based on file name."""
         # Extract name from file
-        file_stem = Path(self.spreadsheet.file_path).stem
-        
+        file_stem = Path(self.data_source.file_path).stem
+
         # Suggest based on file name
         suggestions = self.ontology.suggest_class_for_name(file_stem)
         
@@ -160,10 +168,10 @@ class MappingGenerator:
     
     def _generate_sheet_mapping(self, target_class: OntologyClass) -> Dict[str, Any]:
         """Generate sheet mapping for the target class."""
-        sheet_name = Path(self.spreadsheet.file_path).stem
-        
+        sheet_name = Path(self.data_source.file_path).stem
+
         # Calculate relative path for source if output_path is provided
-        source_path = Path(self.spreadsheet.file_path)
+        source_path = Path(self.data_source.file_path)
         if self.output_path:
             # Get relative path from config location to data file
             config_dir = self.output_path.parent
@@ -202,12 +210,12 @@ class MappingGenerator:
     def _generate_iri_template(self, target_class: OntologyClass) -> str:
         """Generate IRI template for the target class."""
         # Get suggested identifier columns
-        id_cols = self.spreadsheet.suggest_iri_template_columns()
-        
+        id_cols = self.data_source.suggest_iri_template_columns()
+
         if not id_cols:
             # Fallback to first column
-            id_cols = [self.spreadsheet.get_column_names()[0]]
-        
+            id_cols = [self.data_source.get_column_names()[0]]
+
         # Use class name or default prefix
         class_name = target_class.label or self.config.default_class_prefix
         class_name = class_name.lower().replace(" ", "_")
@@ -224,9 +232,9 @@ class MappingGenerator:
         properties = self.ontology.get_datatype_properties(target_class.uri)
         
         # Match columns to properties
-        for col_name in self.spreadsheet.get_column_names():
-            col_analysis = self.spreadsheet.get_analysis(col_name)
-            
+        for col_name in self.data_source.get_column_names():
+            col_analysis = self.data_source.get_analysis(col_name)
+
             # Find matching property
             match_result = self._match_column_to_property(col_name, col_analysis, properties)
             
@@ -263,7 +271,7 @@ class MappingGenerator:
     def _match_column_to_property(
         self,
         col_name: str,
-        col_analysis: ColumnAnalysis,
+        col_analysis: DataFieldAnalysis,
         properties: List[OntologyProperty],
     ) -> Optional[Tuple[OntologyProperty, MatchType, str]]:
         """
@@ -341,6 +349,336 @@ class MappingGenerator:
         
         return None
     
+    def _build_ontology_context(self, target_class: OntologyClass) -> 'OntologyContext':
+        """Build comprehensive ontology context for human mapping decisions.
+
+        Args:
+            target_class: The target ontology class
+
+        Returns:
+            OntologyContext with all relevant information for analysts
+        """
+        from ..models.alignment import OntologyContext, ClassContext
+
+        # Build target class context
+        target_properties = self.ontology.get_datatype_properties(target_class.uri)
+        target_prop_contexts = [self._build_property_context(prop, str(target_class.uri)) for prop in target_properties]
+
+        target_context = ClassContext(
+            uri=str(target_class.uri),
+            label=target_class.label,
+            comment=target_class.comment,
+            local_name=str(target_class.uri).split("#")[-1].split("/")[-1],
+            properties=target_prop_contexts
+        )
+
+        # Build related classes context (classes that have relationships with target class)
+        related_contexts = []
+        obj_properties = self.ontology.get_object_properties(target_class.uri)
+
+        for obj_prop in obj_properties:
+            if obj_prop.range_type and obj_prop.range_type in self.ontology.classes:
+                related_class = self.ontology.classes[obj_prop.range_type]
+                related_properties = self.ontology.get_datatype_properties(obj_prop.range_type)
+                related_prop_contexts = [self._build_property_context(prop, obj_prop.range_type) for prop in related_properties]
+
+                related_context = ClassContext(
+                    uri=str(related_class.uri),
+                    label=related_class.label,
+                    comment=related_class.comment,
+                    local_name=str(related_class.uri).split("#")[-1].split("/")[-1],
+                    properties=related_prop_contexts
+                )
+                related_contexts.append(related_context)
+
+        # Get all properties in ontology (for comprehensive reference)
+        all_properties = []
+        for class_uri, ontology_class in self.ontology.classes.items():
+            class_properties = self.ontology.get_properties_for_class(class_uri)
+            for prop in class_properties:
+                if not any(p.uri == prop.uri for p in all_properties):  # Avoid duplicates
+                    all_properties.append(prop)
+
+        all_prop_contexts = [self._build_property_context(prop) for prop in all_properties]
+
+        # Get object properties for relationship mapping
+        all_obj_properties = []
+        for class_uri, ontology_class in self.ontology.classes.items():
+            obj_props = self.ontology.get_object_properties(class_uri)
+            for prop in obj_props:
+                if not any(p.uri == prop.uri for p in all_obj_properties):  # Avoid duplicates
+                    all_obj_properties.append(prop)
+
+        obj_prop_contexts = [self._build_property_context(prop) for prop in all_obj_properties]
+
+        return OntologyContext(
+            target_class=target_context,
+            related_classes=related_contexts,
+            all_properties=all_prop_contexts,
+            object_properties=obj_prop_contexts
+        )
+
+    def _build_property_context(self, prop: OntologyProperty, domain_class: str = None) -> 'PropertyContext':
+        """Build context information for a property."""
+        from ..models.alignment import PropertyContext
+
+        return PropertyContext(
+            uri=str(prop.uri),
+            label=prop.label,
+            pref_label=prop.pref_label,
+            alt_labels=prop.alt_labels,
+            hidden_labels=prop.hidden_labels,
+            comment=prop.comment,
+            domain_class=domain_class,
+            range_type=prop.range_type,
+            local_name=str(prop.uri).split("#")[-1].split("/")[-1]
+        )
+
+    def _find_obvious_skos_suggestions(
+        self,
+        col_name: str, 
+        target_class: OntologyClass
+    ) -> Optional['SKOSEnrichmentSuggestion']:
+        """Find only obvious, high-confidence SKOS suggestions for clear cases.
+
+        This method only suggests SKOS labels for very clear abbreviation patterns
+        that are unambiguous and commonly used.
+
+        Args:
+            col_name: Column name to match
+            target_class: Target ontology class
+            
+        Returns:
+            SKOSEnrichmentSuggestion for obvious cases, None otherwise
+        """
+        from ..models.alignment import SKOSEnrichmentSuggestion
+
+        properties = self.ontology.get_datatype_properties(target_class.uri)
+
+        # Very conservative abbreviation mappings (only obvious ones)
+        obvious_mappings = {
+            'emp_num': ['employeeNumber', 'employee_number'],
+            'emp_id': ['employeeNumber', 'employee_number', 'employeeId'],
+            'hire_dt': ['hireDate', 'hire_date'],
+            'start_dt': ['startDate', 'start_date'],
+            'end_dt': ['endDate', 'end_date'],
+            'mgr_id': ['managerId', 'manager_id'],
+            'office_loc': ['officeLocation', 'office_location'],
+            'annual_comp': ['annualCompensation', 'annual_compensation', 'salary'],
+            'status_cd': ['statusCode', 'status_code', 'employmentStatus'],
+            'dept_code': ['departmentCode', 'department_code'],
+            'org_code': ['organizationCode', 'organization_code'],
+            'job_ttl': ['jobTitle', 'job_title'],
+            'pos_ttl': ['positionTitle', 'position_title']
+        }
+
+        col_lower = col_name.lower()
+        if col_lower not in obvious_mappings:
+            return None
+
+        possible_matches = obvious_mappings[col_lower]
+
+        # Look for exact matches with property local names or labels
+        for prop in properties:
+            local_name = str(prop.uri).split("#")[-1].split("/")[-1]
+
+            # Check if property local name matches any of the possible matches
+            if local_name.lower() in [m.lower().replace('_', '') for m in possible_matches]:
+                return SKOSEnrichmentSuggestion(
+                    property_uri=str(prop.uri),
+                    property_label=prop.label or local_name,
+                    suggested_label_type="skos:hiddenLabel",
+                    suggested_label_value=col_name,
+                    turtle_snippet=f'{self._format_uri(prop.uri)} skos:hiddenLabel "{col_name}" .',
+                    justification=f"Column '{col_name}' is a common abbreviation for property '{prop.label or local_name}'. This is a standard database column naming pattern."
+                )
+
+            # Check labels too
+            if prop.label:
+                label_normalized = prop.label.lower().replace(' ', '').replace('_', '')
+                if label_normalized in [m.lower().replace('_', '') for m in possible_matches]:
+                    return SKOSEnrichmentSuggestion(
+                        property_uri=str(prop.uri),
+                        property_label=prop.label or local_name,
+                        suggested_label_type="skos:hiddenLabel",
+                        suggested_label_value=col_name,
+                        turtle_snippet=f'{self._format_uri(prop.uri)} skos:hiddenLabel "{col_name}" .',
+                        justification=f"Column '{col_name}' is a common abbreviation for property '{prop.label}'. This is a standard database column naming pattern."
+                    )
+
+        return None
+
+    def _build_ontology_context(self, target_class: OntologyClass) -> 'OntologyContext':
+        """Build comprehensive ontology context for human mapping decisions.
+
+        Args:
+            target_class: The target ontology class
+
+        Returns:
+            OntologyContext with all relevant information for analysts
+        """
+        from ..models.alignment import OntologyContext, ClassContext
+
+        # Build target class context
+        target_properties = self.ontology.get_datatype_properties(target_class.uri)
+        target_prop_contexts = [self._build_property_context(prop, str(target_class.uri)) for prop in target_properties]
+
+        target_context = ClassContext(
+            uri=str(target_class.uri),
+            label=target_class.label,
+            comment=target_class.comment,
+            local_name=str(target_class.uri).split("#")[-1].split("/")[-1],
+            properties=target_prop_contexts
+        )
+
+        # Build related classes context (classes that have relationships with target class)
+        related_contexts = []
+        obj_properties = self.ontology.get_object_properties(target_class.uri)
+
+        for obj_prop in obj_properties:
+            if obj_prop.range_type and obj_prop.range_type in self.ontology.classes:
+                related_class = self.ontology.classes[obj_prop.range_type]
+                related_properties = self.ontology.get_datatype_properties(obj_prop.range_type)
+                related_prop_contexts = [self._build_property_context(prop, obj_prop.range_type) for prop in related_properties]
+
+                related_context = ClassContext(
+                    uri=str(related_class.uri),
+                    label=related_class.label,
+                    comment=related_class.comment,
+                    local_name=str(related_class.uri).split("#")[-1].split("/")[-1],
+                    properties=related_prop_contexts
+                )
+                related_contexts.append(related_context)
+
+        # Get all properties in ontology (for comprehensive reference)
+        all_properties = []
+        for class_uri, ontology_class in self.ontology.classes.items():
+            class_properties = self.ontology.get_properties_for_class(class_uri)
+            for prop in class_properties:
+                if not any(p.uri == prop.uri for p in all_properties):  # Avoid duplicates
+                    all_properties.append(prop)
+
+        all_prop_contexts = [self._build_property_context(prop) for prop in all_properties]
+
+        # Get object properties for relationship mapping
+        all_obj_properties = []
+        for class_uri, ontology_class in self.ontology.classes.items():
+            obj_props = self.ontology.get_object_properties(class_uri)
+            for prop in obj_props:
+                if not any(p.uri == prop.uri for p in all_obj_properties):  # Avoid duplicates
+                    all_obj_properties.append(prop)
+
+        obj_prop_contexts = [self._build_property_context(prop) for prop in all_obj_properties]
+
+        return OntologyContext(
+            target_class=target_context,
+            related_classes=related_contexts,
+            all_properties=all_prop_contexts,
+            object_properties=obj_prop_contexts
+        )
+
+    def _build_property_context(self, prop: OntologyProperty, domain_class: str = None) -> 'PropertyContext':
+        """Build context information for a property."""
+        from ..models.alignment import PropertyContext
+
+        return PropertyContext(
+            uri=str(prop.uri),
+            label=prop.label,
+            pref_label=prop.pref_label,
+            alt_labels=prop.alt_labels,
+            hidden_labels=prop.hidden_labels,
+            comment=prop.comment,
+            domain_class=domain_class,
+            range_type=prop.range_type,
+            local_name=str(prop.uri).split("#")[-1].split("/")[-1]
+        )
+
+    def _is_likely_abbreviation(self, col_pattern: str, prop_pattern: str) -> bool:
+        """Check if column pattern is likely an abbreviation of property pattern."""
+        col_lower = col_pattern.lower()
+        prop_lower = prop_pattern.lower()
+
+        # Common abbreviation patterns
+        abbreviation_pairs = [
+            ('fname', 'firstname'), ('fname', 'first_name'), ('fname', 'given_name'),
+            ('lname', 'lastname'), ('lname', 'last_name'), ('lname', 'surname'), ('lname', 'family_name'),
+            ('mname', 'middlename'), ('mname', 'middle_name'),
+            ('email_addr', 'emailaddress'), ('email_addr', 'email_address'),
+            ('phone_num', 'phonenumber'), ('phone_num', 'phone_number'),
+            ('emp_num', 'employeenumber'), ('emp_num', 'employee_number'),
+            ('mgr_id', 'managerid'), ('mgr_id', 'manager_id'), ('mgr_id', 'manager'),
+            ('dept_code', 'departmentcode'), ('dept_code', 'department_code'),
+            ('org_name', 'organizationname'), ('org_name', 'organization_name'),
+            ('hire_dt', 'hiredate'), ('hire_dt', 'hire_date'),
+            ('status_cd', 'statuscode'), ('status_cd', 'status_code'),
+            ('office_loc', 'officelocation'), ('office_loc', 'office_location'),
+            ('annual_comp', 'annualcompensation'), ('annual_comp', 'annual_compensation'),
+            ('cost_ctr', 'costcenter'), ('cost_ctr', 'cost_center')
+        ]
+
+        # Normalize both for comparison
+        col_norm = col_lower.replace('_', '').replace('-', '').replace(' ', '')
+        prop_norm = prop_lower.replace('_', '').replace('-', '').replace(' ', '')
+
+        # Check exact abbreviation matches
+        for abbr, full in abbreviation_pairs:
+            abbr_norm = abbr.replace('_', '')
+            full_norm = full.replace('_', '')
+
+            if (col_norm == abbr_norm and prop_norm == full_norm) or \
+               (col_norm == full_norm and prop_norm == abbr_norm):
+                return True
+
+        # Check if column is significantly shorter and contains key letters from property
+        if len(col_norm) <= len(prop_norm) * 0.6:  # Column is much shorter
+            # Extract first letters and consonants from property
+            prop_initials = ''.join([c for i, c in enumerate(prop_norm)
+                                   if i == 0 or prop_norm[i-1] in 'aeiou'])
+
+            # Check if column matches these initials closely
+            if len(col_norm) >= 3 and len(prop_initials) >= 3:
+                initial_similarity = SequenceMatcher(None, col_norm, prop_initials).ratio()
+                if initial_similarity > 0.7:
+                    return True
+
+        return False
+
+    def _is_semantically_reasonable_match(self, col_name: str, prop: OntologyProperty, similarity: float) -> bool:
+        """Check if a column-to-property match is semantically reasonable."""
+        col_lower = col_name.lower()
+        prop_label = (prop.label or prop.pref_label or str(prop.uri).split('#')[-1]).lower()
+        prop_local = str(prop.uri).split('#')[-1].split('/')[-1].lower()
+
+        # For low similarity matches, apply stricter semantic checks
+        if similarity < 0.6:
+            # Prevent completely unrelated matches
+            unrelated_pairs = [
+                (['cost', 'ctr', 'center'], ['manager', 'person', 'employee']),
+                (['phone', 'telephone'], ['number', 'id', 'identifier', 'employee']),
+                (['email', 'mail'], ['salary', 'compensation', 'amount']),
+                (['address', 'addr'], ['salary', 'compensation', 'number']),
+                (['department', 'dept'], ['person', 'name', 'manager']),
+            ]
+
+            for col_keywords, prop_keywords in unrelated_pairs:
+                if any(kw in col_lower for kw in col_keywords) and any(kw in prop_label or kw in prop_local for kw in prop_keywords):
+                    return False
+
+        # For medium similarity, still apply some checks
+        elif similarity < 0.8:
+            # Allow more flexibility but still prevent obvious mismatches
+            obvious_mismatches = [
+                (['cost', 'ctr'], ['manager', 'person']),
+                (['phone'], ['employee', 'number', 'identifier']),
+            ]
+
+            for col_keywords, prop_keywords in obvious_mismatches:
+                if any(kw in col_lower for kw in col_keywords) and any(kw in prop_label or kw in prop_local for kw in prop_keywords):
+                    return False
+
+        # High similarity matches are generally acceptable
+        return True
+
     def _generate_object_mappings(self, target_class: OntologyClass) -> Dict[str, Any]:
         """Generate linked object mappings (object properties)."""
         if not self.config.auto_detect_relationships:
@@ -386,8 +724,8 @@ class MappingGenerator:
         potential = []
         range_props = self.ontology.get_datatype_properties(range_class.uri)
         
-        for col_name in self.spreadsheet.get_column_names():
-            col_analysis = self.spreadsheet.get_analysis(col_name)
+        for col_name in self.data_source.get_column_names():
+            col_analysis = self.data_source.get_analysis(col_name)
             match_result = self._match_column_to_property(col_name, col_analysis, range_props)
             
             if match_result:
@@ -454,22 +792,32 @@ class MappingGenerator:
     
     def _build_alignment_report(self, target_class: OntologyClass) -> AlignmentReport:
         """Build alignment report after mapping generation."""
+        # Build comprehensive ontology context
+        ontology_context = self._build_ontology_context(target_class)
+
         # Collect unmapped column details
         unmapped_details = []
+        skos_suggestions = []
+        
         for col_name in self._unmapped_columns:
-            col_analysis = self.spreadsheet.get_analysis(col_name)
+            col_analysis = self.data_source.get_analysis(col_name)
             unmapped_details.append(
                 UnmappedColumn(
                     column_name=col_name,
                     sample_values=col_analysis.sample_values[:5],
                     inferred_datatype=col_analysis.suggested_datatype,
-                    reason="No matching property found in ontology"
+                    reason="No matching property found in ontology",
+                    ontology_context=ontology_context  # Provide full context for human review
                 )
             )
-        
-        # Collect weak matches and suggestions
+            
+            # Only suggest SKOS labels for obvious, unambiguous cases
+            obvious_suggestion = self._find_obvious_skos_suggestions(col_name, target_class)
+            if obvious_suggestion:
+                skos_suggestions.append(obvious_suggestion)
+
+        # Collect weak matches (and add their suggestions to existing list)
         weak_matches = []
-        skos_suggestions = []
         
         confidence_scores = []
         for col_name, (prop, match_type, confidence) in self._mapped_columns.items():
@@ -478,8 +826,8 @@ class MappingGenerator:
             
             # Track weak matches (confidence < 0.8)
             if confidence < 0.8:
-                col_analysis = self.spreadsheet.get_analysis(col_name)
-                
+                col_analysis = self.data_source.get_analysis(col_name)
+
                 # Generate SKOS enrichment suggestion
                 suggestion = self._generate_skos_suggestion(
                     col_name, prop, match_type
@@ -501,7 +849,7 @@ class MappingGenerator:
                     skos_suggestions.append(suggestion)
         
         # Calculate statistics
-        total_columns = len(self.spreadsheet.get_column_names())
+        total_columns = len(self.data_source.get_column_names())
         mapped_columns = len(self._mapped_columns)
         unmapped_columns = len(self._unmapped_columns)
         
@@ -512,7 +860,7 @@ class MappingGenerator:
         
         avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
         success_rate = mapped_columns / total_columns if total_columns > 0 else 0.0
-        
+
         statistics = AlignmentStatistics(
             total_columns=total_columns,
             mapped_columns=mapped_columns,
@@ -524,17 +872,18 @@ class MappingGenerator:
             mapping_success_rate=success_rate,
             average_confidence=avg_confidence
         )
-        
+
         return AlignmentReport(
             ontology_file=self.ontology_file,
-            spreadsheet_file=self.spreadsheet_file,
+            spreadsheet_file=self.data_file,
             target_class=target_class.label or str(target_class.uri),
             statistics=statistics,
             unmapped_columns=unmapped_details,
             weak_matches=weak_matches,
-            skos_enrichment_suggestions=skos_suggestions
+            skos_enrichment_suggestions=skos_suggestions,
+            ontology_context=ontology_context
         )
-    
+
     def _generate_skos_suggestion(
         self,
         col_name: str,
@@ -542,27 +891,56 @@ class MappingGenerator:
         match_type: MatchType
     ) -> Optional[SKOSEnrichmentSuggestion]:
         """Generate SKOS enrichment suggestion for weak matches."""
-        # Determine appropriate label type based on match type
-        if match_type in [MatchType.PARTIAL, MatchType.FUZZY]:
-            # Suggest hiddenLabel for partial/fuzzy matches (database columns, abbreviations)
-            label_type = "skos:hiddenLabel"
-            justification = f"Column name '{col_name}' is a variation that could benefit from a hiddenLabel for better automatic matching"
-        elif match_type == MatchType.EXACT_LOCAL_NAME:
-            # Suggest altLabel for exact local name matches without proper labels
-            label_type = "skos:altLabel"
-            justification = f"Column name '{col_name}' matches property name but lacks proper SKOS labels"
-        else:
-            # No suggestion needed for high-quality matches
-            return None
-        
+        import re
+
         # Get property local name for readability
         local_name = str(prop.uri).split("#")[-1].split("/")[-1]
         property_label = prop.label or prop.pref_label or local_name
-        
+
+        # Determine appropriate label type and justification based on match type and patterns
+        if match_type in [MatchType.PARTIAL, MatchType.FUZZY]:
+            # Analyze the column name to provide better suggestions
+            col_lower = col_name.lower()
+
+            # Check if it's clearly an abbreviation
+            is_abbreviation = (
+                len(col_name) <= 8 and
+                any(abbr in col_lower for abbr in ['num', 'id', 'dt', 'cd', 'ttl', 'loc', 'addr', 'emp', 'mgr', 'dept', 'org'])
+            )
+
+            # Check if it uses underscores/separators (database style)
+            is_database_style = '_' in col_name or '-' in col_name
+
+            if is_abbreviation:
+                label_type = "skos:hiddenLabel"
+                justification = f"Column name '{col_name}' appears to be an abbreviation for property '{property_label}'. Adding as hiddenLabel will enable matching with abbreviated column names"
+            elif is_database_style:
+                label_type = "skos:hiddenLabel"
+                justification = f"Column name '{col_name}' uses database-style naming that relates to property '{property_label}'. Adding as hiddenLabel will improve matching with legacy database columns"
+            else:
+                label_type = "skos:altLabel"
+                justification = f"Column name '{col_name}' is an alternative form of property '{property_label}'. Adding as altLabel will enable matching with this variation"
+
+        elif match_type == MatchType.EXACT_LOCAL_NAME:
+            # For exact local name matches without proper SKOS labels, suggest improving the ontology
+            if not prop.pref_label and not prop.alt_labels:
+                label_type = "skos:prefLabel"
+                # Convert camelCase to human-readable format
+                readable_label = re.sub(r'([a-z])([A-Z])', r'\1 \2', local_name).title()
+                justification = f"Property '{local_name}' matches column '{col_name}' but lacks SKOS labels. Adding prefLabel '{readable_label}' will improve semantic clarity"
+                col_name = readable_label  # Suggest human-readable label instead of column name
+            else:
+                label_type = "skos:altLabel"
+                justification = f"Column name '{col_name}' exactly matches the property local name. Adding as altLabel provides an explicit alternative form"
+
+        else:
+            # No suggestion needed for high-quality matches
+            return None
+
         # Generate Turtle snippet
         prop_prefix = self._format_uri(prop.uri)
         turtle_snippet = f'{prop_prefix} {label_type} "{col_name}" .'
-        
+
         return SKOSEnrichmentSuggestion(
             property_uri=str(prop.uri),
             property_label=property_label,
@@ -571,7 +949,7 @@ class MappingGenerator:
             turtle_snippet=turtle_snippet,
             justification=justification
         )
-    
+
     def generate_with_alignment_report(
         self,
         target_class: Optional[str] = None,
@@ -579,45 +957,46 @@ class MappingGenerator:
     ) -> Tuple[Dict[str, Any], AlignmentReport]:
         """
         Generate mapping configuration with alignment report.
-        
+
         Args:
             target_class: URI or label of the target ontology class
             output_path: Path where the config will be saved
-            
+
         Returns:
             Tuple of (mapping_dict, alignment_report)
         """
         # Generate mapping first
         mapping = self.generate(target_class=target_class, output_path=output_path)
-        
+
         # Find resolved target class
         resolved_class = None
         if target_class:
             resolved_class = self._resolve_class(target_class)
         else:
             resolved_class = self._auto_detect_class()
-        
+
         # Build alignment report
         if resolved_class:
             self.alignment_report = self._build_alignment_report(resolved_class)
-        
+
         return mapping, self.alignment_report
-    
+
     def export_alignment_report(self, output_file: str):
         """Export alignment report to JSON file.
-        
+
         Args:
             output_file: Path to save the JSON report
         """
         if not self.alignment_report:
             raise ValueError("No alignment report available. Call generate_with_alignment_report() first.")
-        
+
         with open(output_file, 'w') as f:
             json.dump(self.alignment_report.to_dict(), f, indent=2)
-    
+
     def print_alignment_summary(self):
         """Print a human-readable alignment summary to console."""
         if not self.alignment_report:
             raise ValueError("No alignment report available. Call generate_with_alignment_report() first.")
-        
+
         print(self.alignment_report.summary_message())
+

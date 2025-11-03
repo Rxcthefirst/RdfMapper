@@ -5,17 +5,15 @@ based on alignment reports, including interactive and batch modes.
 """
 
 import os
-from datetime import datetime
-from typing import Dict, List, Optional, TextIO
-from pathlib import Path
-from rdflib import Graph, Namespace, Literal, URIRef, RDF, RDFS
+from typing import Dict, List, Optional
+from rdflib import Graph, Namespace, Literal, URIRef
 from rdflib.namespace import SKOS, DCTERMS, XSD
 
 from ..models.enrichment import (
     SKOSAddition, SKOSLabelType, EnrichmentOperation, 
     EnrichmentAction, ProvenanceInfo, EnrichmentResult, EnrichmentStats
 )
-from ..models.alignment import AlignmentReport, UnmappedColumn, SKOSEnrichmentSuggestion
+from ..models.alignment import AlignmentReport
 
 # Namespace for provenance
 PROV = Namespace("http://www.w3.org/ns/prov#")

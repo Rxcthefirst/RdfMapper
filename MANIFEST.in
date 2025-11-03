@@ -1,0 +1,34 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include pyproject.toml
+include requirements.txt
+
+# Include example files
+recursive-include examples *.csv *.xlsx *.json *.xml *.ttl *.yaml *.yml *.md
+
+# Include documentation
+recursive-include docs *.md *.rst
+
+# Include test fixtures
+recursive-include tests/fixtures *.csv *.xlsx *.json *.xml *.ttl *.yaml *.yml
+
+# Exclude development and build artifacts
+exclude configure_pycharm_python313.sh
+exclude python313
+exclude *.py[co]
+exclude debug_*.py
+exclude test_*.py
+exclude demo.sh
+exclude install.sh
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude .coverage
+global-exclude htmlcov
+prune .git
+prune .pytest_cache
+prune .ruff_cache
+prune .venv*
+prune build
+prune dist
+prune htmlcov

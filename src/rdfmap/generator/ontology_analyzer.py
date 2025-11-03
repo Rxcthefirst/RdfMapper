@@ -1,6 +1,6 @@
 """Ontology analyzer for extracting classes and properties."""
 
-from typing import Dict, List, Set, Tuple, Optional
+from typing import Dict, List, Optional
 from rdflib import Graph, Namespace, RDF, RDFS, OWL
 from rdflib.term import URIRef
 
@@ -86,16 +86,29 @@ class OntologyProperty:
 class OntologyAnalyzer:
     """Analyzes an ontology to extract classes and properties for mapping generation."""
     
-    def __init__(self, ontology_file: str):
+    def __init__(self, ontology_file: str, imports: Optional[List[str]] = None):
         """
-        Initialize the analyzer with an ontology file.
-        
+        Initialize the analyzer with an ontology file and optional imports.
+
         Args:
-            ontology_file: Path to ontology file (any RDFLib-supported format)
+            ontology_file: Path to primary ontology file (any RDFLib-supported format)
+            imports: Optional list of additional ontology files/URIs to import
         """
         self.graph = Graph()
+        self.ontology_file = ontology_file
+        self.imports = imports or []
+
+        # Load primary ontology
         self.graph.parse(ontology_file)
         
+        # Load imported ontologies
+        for import_source in self.imports:
+            try:
+                self.graph.parse(import_source)
+            except Exception as e:
+                # Log warning but don't fail - some imports might be optional
+                print(f"Warning: Failed to load imported ontology '{import_source}': {e}")
+
         self.classes: Dict[URIRef, OntologyClass] = {}
         self.properties: Dict[URIRef, OntologyProperty] = {}
         

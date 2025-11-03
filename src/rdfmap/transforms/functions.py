@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Dict, Optional
 
+import pandas as pd
 from dateutil import parser as date_parser
 
 
@@ -232,8 +233,7 @@ def strip(value: Any) -> str:
     return str(value).strip()
 
 
-# Import pandas for NaN checking
-import pandas as pd
+# Pandas already imported at top of file
 
 
 def apply_transform(value: Any, transform_name: str) -> Any:

@@ -32,6 +32,37 @@ class ConfidenceLevel(str, Enum):
     VERY_LOW = "very_low"  # 0.0 - 0.29
 
 
+
+class PropertyContext(BaseModel):
+    """Context information about an ontology property for human review."""
+    uri: str = Field(description="Property URI")
+    label: Optional[str] = Field(default=None, description="rdfs:label of the property")
+    pref_label: Optional[str] = Field(default=None, description="skos:prefLabel")
+    alt_labels: List[str] = Field(default_factory=list, description="skos:altLabel values")
+    hidden_labels: List[str] = Field(default_factory=list, description="skos:hiddenLabel values")
+    comment: Optional[str] = Field(default=None, description="rdfs:comment explaining the property")
+    domain_class: Optional[str] = Field(default=None, description="Primary domain class")
+    range_type: Optional[str] = Field(default=None, description="Range type (datatype or class)")
+    local_name: str = Field(description="Local name part of the URI")
+
+
+class ClassContext(BaseModel):
+    """Context information about an ontology class for human review."""
+    uri: str = Field(description="Class URI")
+    label: Optional[str] = Field(default=None, description="rdfs:label of the class")
+    comment: Optional[str] = Field(default=None, description="rdfs:comment explaining the class")
+    local_name: str = Field(description="Local name part of the URI")
+    properties: List[PropertyContext] = Field(default_factory=list, description="Properties available for this class")
+
+
+class OntologyContext(BaseModel):
+    """Comprehensive ontology context for human mapping decisions."""
+    target_class: ClassContext = Field(description="The target class being mapped to")
+    related_classes: List[ClassContext] = Field(default_factory=list, description="Related classes that might be relevant")
+    all_properties: List[PropertyContext] = Field(default_factory=list, description="All available properties in ontology")
+    object_properties: List[PropertyContext] = Field(default_factory=list, description="Object properties for relationships")
+
+
 class UnmappedColumn(BaseModel):
     """Information about a column that couldn't be mapped."""
     column_name: str = Field(description="Name of the unmapped column")
@@ -46,6 +77,10 @@ class UnmappedColumn(BaseModel):
     reason: str = Field(
         default="No matching property found in ontology",
         description="Reason why column couldn't be mapped"
+    )
+    ontology_context: Optional[OntologyContext] = Field(
+        default=None,
+        description="Ontology context to help with manual mapping decisions"
     )
 
 
@@ -144,7 +179,11 @@ class AlignmentReport(BaseModel):
         default_factory=list,
         description="Suggestions for enriching the ontology with SKOS labels"
     )
-    
+    ontology_context: Optional[OntologyContext] = Field(
+        default=None,
+        description="Comprehensive ontology context for informed mapping decisions"
+    )
+
     # Configuration
     class Config:
         json_encoders = {
@@ -159,25 +198,25 @@ class AlignmentReport(BaseModel):
         """Generate a human-readable summary message."""
         stats = self.statistics
         lines = [
-            f"Semantic Alignment Report",
-            f"=" * 50,
+            "Semantic Alignment Report",
+            "=" * 50,
             f"Generated: {self.generated_at.strftime('%Y-%m-%d %H:%M:%S')}",
             f"Ontology: {self.ontology_file}",
             f"Spreadsheet: {self.spreadsheet_file}",
             f"Target Class: {self.target_class}",
-            f"",
-            f"Statistics:",
+            "",
+            "Statistics:",
             f"  Total Columns: {stats.total_columns}",
             f"  Mapped: {stats.mapped_columns} ({stats.mapping_success_rate:.1%})",
             f"  Unmapped: {stats.unmapped_columns}",
-            f"",
-            f"Confidence Distribution:",
+            "",
+            "Confidence Distribution:",
             f"  High (≥0.8):     {stats.high_confidence_matches}",
             f"  Medium (0.5-0.8): {stats.medium_confidence_matches}",
             f"  Low (0.3-0.5):    {stats.low_confidence_matches}",
             f"  Very Low (<0.3):  {stats.very_low_confidence_matches}",
             f"  Average: {stats.average_confidence:.2f}",
-            f"",
+            "",
         ]
         
         if self.unmapped_columns:
