@@ -63,10 +63,18 @@ def run_command(cmd: list[str], description: str, allow_nonzero_exit=False):
     if result.stdout:
         print(result.stdout)
     
+    # Handle stderr - filter out expected typer.Exit tracebacks for validate-ontology
+    if result.stderr:
+        stderr_lines = result.stderr.strip()
+        # Filter out typer.Exit traceback for validate-ontology command (expected behavior)
+        if "validate-ontology" in ' '.join(cmd) and "click.exceptions.Exit" in stderr_lines:
+            # This is expected - validate-ontology exits with code 1 when coverage is below threshold
+            pass
+        elif stderr_lines and not allow_nonzero_exit:
+            print(f"❌ Error: {stderr_lines}")
+
     # For validate-ontology, exit code 1 just means coverage below threshold (expected for demo)
     if result.returncode != 0 and not allow_nonzero_exit:
-        if result.stderr:
-            print(f"❌ Error: {result.stderr}")
         return False
     
     return True
@@ -115,7 +123,7 @@ def main():
     if not run_command([
         "rdfmap", "generate",
         "--ontology", str(INITIAL_ONTOLOGY),
-        "--spreadsheet", str(EMPLOYEE_DATA),
+        "--data", str(EMPLOYEE_DATA),
         "--class", "http://example.org/hr#Employee",
         "--output", str(mapping_1_path),
         "--alignment-report"
@@ -185,7 +193,7 @@ def main():
     if not run_command([
         "rdfmap", "generate",
         "--ontology", str(ENRICHED_ONTOLOGY_1),
-        "--spreadsheet", str(EMPLOYEE_DATA),
+        "--data", str(EMPLOYEE_DATA),
         "--class", "http://example.org/hr#Employee",
         "--output", str(mapping_2_path),
         "--alignment-report"
@@ -243,7 +251,7 @@ def main():
     if not run_command([
         "rdfmap", "generate",
         "--ontology", str(ENRICHED_ONTOLOGY_2),
-        "--spreadsheet", str(EMPLOYEE_DATA),
+        "--data", str(EMPLOYEE_DATA),
         "--class", "http://example.org/hr#Employee",
         "--output", str(mapping_3_path),
         "--alignment-report"

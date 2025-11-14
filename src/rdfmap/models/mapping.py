@@ -128,6 +128,12 @@ class ProcessingOptions(BaseModel):
     )
     skip_empty_values: bool = Field(True, description="Skip columns with empty values")
     chunk_size: int = Field(1000, description="Number of rows to process at a time")
+    aggregate_duplicates: bool = Field(
+        True, description="Aggregate triples with duplicate IRIs (improves readability but has performance cost)"
+    )
+    output_format: Optional[str] = Field(
+        None, description="Default output format (ttl, nt, xml, jsonld)"
+    )
 
 
 class DefaultsConfig(BaseModel):

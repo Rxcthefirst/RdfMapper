@@ -2,10 +2,14 @@
 
 from typing import Dict, List, Optional, Any
 from pathlib import Path
-import pandas as pd
+import polars as pl
 import re
 import json
 import xml.etree.ElementTree as ET
+
+# Import Polars helper functions
+from .polars_helpers import (_infer_polars_type, _suggest_xsd_datatype_polars,
+                           _is_likely_identifier_polars, _detect_pattern_polars)
 
 
 class DataFieldAnalysis:
@@ -101,33 +105,34 @@ class DataSourceAnalyzer:
     def _analyze_csv(self) -> None:
         """Analyze CSV/TSV data."""
         try:
-            # Read with pandas for robust CSV parsing
-            df = pd.read_csv(self.file_path)
+            # Read with Polars for high performance
+            df = pl.read_csv(self.file_path, n_rows=100)  # Sample first 100 rows
             self.total_rows = len(df)
 
             # Convert to list of dictionaries for uniform processing
-            self.sample_data = df.head(100).to_dict('records')
+            self.sample_data = df.to_dicts()
 
             # Analyze each column
             for col_name in df.columns:
                 analysis = DataFieldAnalysis(col_name)
-                series = df[col_name]
+                column = df[col_name]
 
                 # Basic statistics
-                analysis.total_count = len(series)
-                analysis.null_count = series.isnull().sum()
-                analysis.sample_values = series.dropna().head(10).tolist()
+                analysis.total_count = len(df)
+                analysis.null_count = column.null_count()
+                analysis.sample_values = column.drop_nulls().head(10).to_list()
 
-                # Infer type and datatype
-                analysis.inferred_type = self._infer_pandas_type(series)
-                analysis.suggested_datatype = self._suggest_xsd_datatype(series)
+                # Infer type and datatype using Polars helpers
+                analysis.inferred_type = _infer_polars_type(column)
+                analysis.suggested_datatype = _suggest_xsd_datatype_polars(column)
 
                 # Check uniqueness and identifier potential
-                analysis.is_unique = series.nunique() == len(series.dropna())
-                analysis.is_identifier = self._is_likely_identifier(col_name, series)
+                non_null = column.drop_nulls()
+                analysis.is_unique = non_null.n_unique() == len(non_null)
+                analysis.is_identifier = _is_likely_identifier_polars(col_name, column)
 
                 # Pattern detection
-                analysis.pattern = self._detect_pattern(series)
+                analysis.pattern = _detect_pattern_polars(column)
 
                 self.field_analyses[col_name] = analysis
 
@@ -137,26 +142,46 @@ class DataSourceAnalyzer:
     def _analyze_excel(self) -> None:
         """Analyze Excel data."""
         try:
-            # Read Excel file - use first sheet for now
-            df = pd.read_excel(self.file_path, sheet_name=0)
+            # Read Excel file using Polars - use first sheet for now
+            try:
+                df = pl.read_excel(self.file_path, sheet_name=0)
+                df = df.head(100)  # Sample first 100 rows
+            except (ImportError, AttributeError):
+                # Fallback to openpyxl for Excel reading
+                from openpyxl import load_workbook
+                wb = load_workbook(self.file_path, read_only=True)
+                ws = wb.active
+
+                # Extract data as list of lists
+                data = []
+                for row in ws.iter_rows(values_only=True, max_row=101):  # Header + 100 rows
+                    data.append(list(row))
+
+                if data:
+                    columns = [str(col) if col is not None else f"Column_{i}" for i, col in enumerate(data[0])]
+                    df = pl.DataFrame(data[1:], schema=columns)
+                else:
+                    return
+
             self.total_rows = len(df)
 
             # Convert to list of dictionaries
-            self.sample_data = df.head(100).to_dict('records')
+            self.sample_data = df.to_dicts()
 
             # Analyze each column (same as CSV)
             for col_name in df.columns:
                 analysis = DataFieldAnalysis(col_name)
-                series = df[col_name]
+                column = df[col_name]
 
-                analysis.total_count = len(series)
-                analysis.null_count = series.isnull().sum()
-                analysis.sample_values = series.dropna().head(10).tolist()
-                analysis.inferred_type = self._infer_pandas_type(series)
-                analysis.suggested_datatype = self._suggest_xsd_datatype(series)
-                analysis.is_unique = series.nunique() == len(series.dropna())
-                analysis.is_identifier = self._is_likely_identifier(col_name, series)
-                analysis.pattern = self._detect_pattern(series)
+                analysis.total_count = len(df)
+                analysis.null_count = column.null_count()
+                analysis.sample_values = column.drop_nulls().head(10).to_list()
+                analysis.inferred_type = _infer_polars_type(column)
+                analysis.suggested_datatype = _suggest_xsd_datatype_polars(column)
+                non_null = column.drop_nulls()
+                analysis.is_unique = non_null.n_unique() == len(non_null)
+                analysis.is_identifier = _is_likely_identifier_polars(col_name, column)
+                analysis.pattern = _detect_pattern_polars(column)
 
                 self.field_analyses[col_name] = analysis
 
@@ -202,20 +227,20 @@ class DataSourceAnalyzer:
 
             # Create DataFrame from expanded and flattened data
             if expanded_data:
-                df = pd.DataFrame(expanded_data)
+                df = pl.DataFrame(expanded_data)
 
                 for col_name in df.columns:
                     analysis = DataFieldAnalysis(col_name, path=col_name)
-                    series = df[col_name]
+                    column = df[col_name]
 
-                    analysis.total_count = len(series)
-                    analysis.null_count = series.isnull().sum()
-                    analysis.sample_values = series.dropna().head(10).tolist()
-                    analysis.inferred_type = self._infer_pandas_type(series)
-                    analysis.suggested_datatype = self._suggest_xsd_datatype(series)
-                    analysis.is_unique = series.nunique() == len(series.dropna())
-                    analysis.is_identifier = self._is_likely_identifier(col_name, series)
-                    analysis.pattern = self._detect_pattern(series)
+                    analysis.total_count = len(df)
+                    analysis.null_count = column.null_count()
+                    analysis.sample_values = column.drop_nulls().head(10).to_list()
+                    analysis.inferred_type = _infer_polars_type(column)
+                    analysis.suggested_datatype = _suggest_xsd_datatype_polars(column)
+                    analysis.is_unique = column.n_unique() == len(column.drop_nulls())
+                    analysis.is_identifier = _is_likely_identifier_polars(col_name, column)
+                    analysis.pattern = _detect_pattern_polars(column)
                     analysis.is_nested = '.' in col_name  # Nested if contains dot notation
 
                     self.field_analyses[col_name] = analysis
@@ -253,20 +278,20 @@ class DataSourceAnalyzer:
                 flattened_data.append(flattened)
 
             if flattened_data:
-                df = pd.DataFrame(flattened_data)
+                df = pl.DataFrame(flattened_data)
 
                 for col_name in df.columns:
                     analysis = DataFieldAnalysis(col_name, path=col_name)
-                    series = df[col_name]
+                    column = df[col_name]
 
-                    analysis.total_count = len(series)
-                    analysis.null_count = series.isnull().sum()
-                    analysis.sample_values = series.dropna().head(10).tolist()
-                    analysis.inferred_type = self._infer_pandas_type(series)
-                    analysis.suggested_datatype = self._suggest_xsd_datatype(series)
-                    analysis.is_unique = series.nunique() == len(series.dropna())
-                    analysis.is_identifier = self._is_likely_identifier(col_name, series)
-                    analysis.pattern = self._detect_pattern(series)
+                    analysis.total_count = len(df)
+                    analysis.null_count = column.null_count()
+                    analysis.sample_values = column.drop_nulls().head(10).to_list()
+                    analysis.inferred_type = _infer_polars_type(column)
+                    analysis.suggested_datatype = _suggest_xsd_datatype_polars(column)
+                    analysis.is_unique = column.n_unique() == len(column.drop_nulls())
+                    analysis.is_identifier = _is_likely_identifier_polars(col_name, column)
+                    analysis.pattern = _detect_pattern_polars(column)
                     analysis.is_nested = '.' in col_name
 
                     self.field_analyses[col_name] = analysis
@@ -469,100 +494,7 @@ class DataSourceAnalyzer:
         analyze_elem(sample_elem)
         return structure
 
-    def _infer_pandas_type(self, series: pd.Series) -> str:
-        """Infer the pandas data type."""
-        dtype_str = str(series.dtype)
-
-        if dtype_str.startswith('int'):
-            return 'integer'
-        elif dtype_str.startswith('float'):
-            return 'float'
-        elif dtype_str.startswith('bool'):
-            return 'boolean'
-        elif dtype_str.startswith('datetime'):
-            return 'datetime'
-        else:
-            return 'string'
-
-    def _suggest_xsd_datatype(self, series: pd.Series) -> str:
-        """Suggest appropriate XSD datatype."""
-        sample_values = series.dropna().head(20)
-
-        if len(sample_values) == 0:
-            return "xsd:string"
-
-        # Check for specific patterns first
-        for value in sample_values:
-            str_val = str(value)
-
-            # Date patterns
-            if re.match(r'^\d{4}-\d{2}-\d{2}$', str_val):
-                return "xsd:date"
-            elif re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', str_val):
-                return "xsd:dateTime"
-            elif re.match(r'^\d{2}:\d{2}:\d{2}$', str_val):
-                return "xsd:time"
-
-            # Boolean patterns
-            if str_val.lower() in ['true', 'false', 'yes', 'no', '1', '0']:
-                return "xsd:boolean"
-
-        # Use pandas inference
-        dtype = str(series.dtype)
-
-        if dtype.startswith('int'):
-            return "xsd:integer"
-        elif dtype.startswith('float'):
-            return "xsd:decimal"
-        elif dtype.startswith('bool'):
-            return "xsd:boolean"
-        elif dtype.startswith('datetime'):
-            return "xsd:dateTime"
-        else:
-            return "xsd:string"
-
-    def _is_likely_identifier(self, field_name: str, series: pd.Series) -> bool:
-        """Determine if field is likely an identifier."""
-        name_lower = field_name.lower()
-
-        # Name-based heuristics
-        id_indicators = ['id', 'identifier', 'key', 'number', 'num', 'code', 'uuid', 'guid']
-        if any(indicator in name_lower for indicator in id_indicators):
-            return True
-
-        # Data-based heuristics
-        if len(series.dropna()) > 0:
-            uniqueness = series.nunique() / len(series.dropna())
-            return uniqueness > 0.95  # Highly unique
-
-        return False
-
-    def _detect_pattern(self, series: pd.Series) -> Optional[str]:
-        """Detect common patterns in data."""
-        sample_values = series.dropna().astype(str).head(10)
-
-        if len(sample_values) == 0:
-            return None
-
-        # Common patterns
-        patterns = {
-            'email': r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
-            'phone': r'^[\+]?[1-9][\d]{0,15}$',
-            'url': r'^https?://[^\s]+$',
-            'uuid': r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
-            'date_iso': r'^\d{4}-\d{2}-\d{2}$',
-            'datetime_iso': r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}',
-        }
-
-        for pattern_name, pattern_regex in patterns.items():
-            matches = sum(1 for val in sample_values if re.match(pattern_regex, str(val)))
-            if matches / len(sample_values) > 0.8:  # 80% match rate
-                return pattern_name
-
-        return None
-
-    # Public interface methods (maintaining compatibility)
-
+    # Public interface methods
     def get_column_names(self) -> List[str]:
         """Get list of all field/column names."""
         return list(self.field_analyses.keys())
@@ -600,7 +532,7 @@ class DataSourceAnalyzer:
 
         for name, analysis in self.field_analyses.items():
             if analysis.is_nested and '.' in name:
-                parent = '.'.join(name.split('.')[:-1])
+                parent = name.split('.')[0]
                 if parent not in nested:
                     nested[parent] = []
                 nested[parent].append(name)

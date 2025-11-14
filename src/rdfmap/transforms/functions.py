@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Dict, Optional
 
-import pandas as pd
 from dateutil import parser as date_parser
 
 
@@ -52,7 +51,7 @@ def to_decimal(value: Any) -> Decimal:
     Raises:
         ValueError: If conversion fails
     """
-    if pd.isna(value) or value == "":
+    if value is None or value == "":
         raise ValueError("Cannot convert empty value to decimal")
     
     try:
@@ -79,7 +78,7 @@ def to_integer(value: Any) -> int:
     Raises:
         ValueError: If conversion fails
     """
-    if pd.isna(value) or value == "":
+    if value is None or value == "":
         raise ValueError("Cannot convert empty value to integer")
     
     try:
@@ -108,7 +107,7 @@ def to_date(value: Any) -> str:
     Raises:
         ValueError: If parsing fails
     """
-    if pd.isna(value) or value == "":
+    if value is None or value == "":
         raise ValueError("Cannot convert empty value to date")
     
     try:
@@ -135,7 +134,7 @@ def to_datetime(value: Any) -> str:
     Raises:
         ValueError: If parsing fails
     """
-    if pd.isna(value) or value == "":
+    if value is None or value == "":
         raise ValueError("Cannot convert empty value to datetime")
     
     try:
@@ -168,7 +167,7 @@ def to_boolean(value: Any) -> bool:
     Raises:
         ValueError: If conversion fails
     """
-    if pd.isna(value):
+    if value is None:
         raise ValueError("Cannot convert empty value to boolean")
     
     if isinstance(value, bool):
@@ -198,7 +197,7 @@ def uppercase(value: Any) -> str:
     Returns:
         Uppercase string
     """
-    if pd.isna(value):
+    if value is None:
         return ""
     return str(value).upper()
 
@@ -213,7 +212,7 @@ def lowercase(value: Any) -> str:
     Returns:
         Lowercase string
     """
-    if pd.isna(value):
+    if value is None:
         return ""
     return str(value).lower()
 
@@ -228,21 +227,19 @@ def strip(value: Any) -> str:
     Returns:
         Stripped string
     """
-    if pd.isna(value):
+    if value is None:
         return ""
     return str(value).strip()
 
 
-# Pandas already imported at top of file
-
-
-def apply_transform(value: Any, transform_name: str) -> Any:
+def apply_transform(value: Any, transform_name: str, context: Dict[str, Any] = None) -> Any:
     """Apply a named transform to a value.
     
     Args:
         value: Value to transform
         transform_name: Name of transform to apply
-        
+        context: Optional context dictionary for complex transforms
+
     Returns:
         Transformed value
         

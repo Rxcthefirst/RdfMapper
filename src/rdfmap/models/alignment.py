@@ -18,9 +18,12 @@ class MatchType(str, Enum):
     EXACT_ALT_LABEL = "exact_alt_label"  # Exact match with skos:altLabel
     EXACT_HIDDEN_LABEL = "exact_hidden_label"  # Exact match with skos:hiddenLabel
     EXACT_LOCAL_NAME = "exact_local_name"  # Exact match with property local name
+    SEMANTIC_SIMILARITY = "semantic_similarity"  # Semantic embedding similarity
     PARTIAL = "partial"  # Partial string match
     FUZZY = "fuzzy"  # Fuzzy/similarity match
     MANUAL = "manual"  # Manually specified in config
+    GRAPH_REASONING = "graph_reasoning"  # Match using ontology graph structure
+    INHERITED_PROPERTY = "inherited_property"  # Property inherited from parent class
     UNMAPPED = "unmapped"  # No match found
 
 
@@ -236,8 +239,8 @@ def calculate_confidence_score(match_type: MatchType, similarity: float = 1.0) -
     
     Args:
         match_type: Type of match that was made
-        similarity: Similarity score for fuzzy matches (0-1)
-        
+        similarity: Similarity score for fuzzy/semantic matches (0-1)
+
     Returns:
         Confidence score between 0 and 1
     """
@@ -247,6 +250,7 @@ def calculate_confidence_score(match_type: MatchType, similarity: float = 1.0) -
         MatchType.EXACT_ALT_LABEL: 0.90,
         MatchType.EXACT_HIDDEN_LABEL: 0.85,
         MatchType.EXACT_LOCAL_NAME: 0.80,
+        MatchType.SEMANTIC_SIMILARITY: similarity,  # Use actual embedding similarity
         MatchType.PARTIAL: 0.60,
         MatchType.FUZZY: 0.40,
         MatchType.MANUAL: 1.0,

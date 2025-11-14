@@ -17,7 +17,7 @@ setup(
     python_requires=">=3.11",
     install_requires=[
         "rdflib>=7.0.0",
-        "pandas>=2.1.0",
+        "polars>=0.19.0",
         "openpyxl>=3.1.0",
         "pydantic>=2.5.0",
         "pydantic-settings>=2.1.0",
@@ -37,7 +37,7 @@ setup(
             "ruff>=0.1.8",
             "types-PyYAML>=6.0.12",
             "types-python-dateutil>=2.8.19",
-            "pandas-stubs>=2.1.1",
+            "psutil>=5.9.0",
         ],
     },
     entry_points={

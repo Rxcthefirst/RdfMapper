@@ -52,6 +52,10 @@ output/
 *.nt
 *.rdf
 
+# Test data (large files)
+test_data/
+*_[0-9]*.csv
+
 # Logs
 *.log
 
