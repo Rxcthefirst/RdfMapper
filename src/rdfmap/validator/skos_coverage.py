@@ -6,7 +6,7 @@ better semantic alignment.
 """
 
 from typing import List, Optional, Set
-from rdflib import Graph, URIRef
+from rdflib import Graph, URIRef, RDF, RDFS, OWL, SKOS
 from pydantic import BaseModel, Field
 
 

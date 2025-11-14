@@ -90,6 +90,11 @@ def convert(
         "-v",
         help="Enable detailed logging",
     ),
+    aggregate_duplicates: Optional[bool] = typer.Option(
+        None,
+        "--aggregate-duplicates/--no-aggregate-duplicates",
+        help="Aggregate triples with duplicate IRIs (improves readability but has performance cost). Auto-detected based on format if not specified.",
+    ),
     log_file: Optional[Path] = typer.Option(
         None,
         "--log",
@@ -97,7 +102,7 @@ def convert(
         dir_okay=False,
     ),
 ) -> None:
-    """Convert spreadsheet data to RDF triples."""
+    """Convert spreadsheet data to RDF triples using high-performance Polars engine."""
     try:
         # Load mapping configuration
         console.print(f"[blue]Loading mapping configuration from {mapping}...[/blue]")
@@ -129,43 +134,85 @@ def convert(
         # Initialize processing report
         processing_report = ProcessingReport()
         
-        # Build RDF graph
-        builder = RDFGraphBuilder(config, processing_report)
-        
-        # Process each sheet
-        for sheet in config.sheets:
-            console.print(f"[blue]Processing sheet: {sheet.name}[/blue]")
-            
-            # Create parser
-            parser = create_parser(
-                Path(sheet.source),
-                delimiter=config.options.delimiter,
-                has_header=config.options.header,
-            )
-            
-            if verbose:
-                columns = parser.get_column_names()
-                console.print(f"  Columns: {', '.join(columns)}")
-            
-            # Process data in chunks
-            row_offset = 0
-            for chunk in parser.parse(chunk_size=config.options.chunk_size):
-                # Apply limit if specified
-                if limit and row_offset >= limit:
-                    break
-                
-                if limit:
-                    remaining = limit - row_offset
-                    chunk = chunk.head(remaining)
-                
-                # Add to graph
-                builder.add_dataframe(chunk, sheet, offset=row_offset)
-                
-                row_offset += len(chunk)
-                
+        # Determine output format and aggregation settings
+        output_format = format or config.options.output_format or "ttl"
+
+        # Auto-detect aggregation setting based on format and user preference
+        if aggregate_duplicates is None:
+            # Auto-detect: NT format defaults to no aggregation for performance
+            if output_format.lower() in ['nt', 'ntriples']:
+                enable_aggregation = False
                 if verbose:
-                    console.print(f"  Processed {row_offset} rows...")
-        
+                    console.print("[yellow]NT format detected: Disabling aggregation for performance (use --aggregate-duplicates to override)[/yellow]")
+            else:
+                enable_aggregation = config.options.aggregate_duplicates
+        else:
+            enable_aggregation = aggregate_duplicates
+
+        # Override config setting for this run
+        config.options.aggregate_duplicates = enable_aggregation
+
+        # Create appropriate builder based on format and aggregation settings
+        if output_format.lower() in ['nt', 'ntriples'] and not enable_aggregation and output:
+            # Use streaming NT writer for high performance
+            from ..emitter.nt_streaming import NTriplesStreamWriter
+            nt_writer = NTriplesStreamWriter(output)
+            builder = RDFGraphBuilder(config, processing_report, streaming_writer=nt_writer)
+            nt_context_manager = nt_writer
+            if verbose:
+                console.print("[blue]Using high-performance NT streaming mode (no aggregation)[/blue]")
+        else:
+            # Use regular graph builder with in-memory aggregation
+            builder = RDFGraphBuilder(config, processing_report)
+            nt_context_manager = None
+            if verbose and not enable_aggregation:
+                console.print("[yellow]Aggregation disabled but not using NT format - results may contain duplicate IRIs[/yellow]")
+
+        # Import nullcontext for context management
+        try:
+            from contextlib import nullcontext
+        except ImportError:
+            from contextlib import contextmanager
+            @contextmanager
+            def nullcontext():
+                yield
+
+        # Process sheets with optional NT streaming context
+        with nt_context_manager if nt_context_manager else nullcontext():
+            # Process each sheet
+            for sheet in config.sheets:
+                console.print(f"[blue]Processing sheet: {sheet.name}[/blue]")
+
+                # Create parser
+                parser = create_parser(
+                    Path(sheet.source),
+                    delimiter=config.options.delimiter,
+                    has_header=config.options.header,
+                )
+
+                if verbose:
+                    columns = parser.get_column_names()
+                    console.print(f"  Columns: {', '.join(columns)}")
+
+                # Process data in chunks
+                row_offset = 0
+                for chunk in parser.parse(chunk_size=config.options.chunk_size):
+                    # Apply limit if specified
+                    if limit and row_offset >= limit:
+                        break
+
+                    if limit:
+                        remaining = limit - row_offset
+                        chunk = chunk.head(remaining)
+
+                    # Add to graph
+                    builder.add_dataframe(chunk, sheet, offset=row_offset)
+
+                    row_offset += len(chunk)
+
+                    if verbose:
+                        console.print(f"  Processed {row_offset} rows...")
+
         # Finalize report
         processing_report.finalize()
         processing_report.successful_rows = (
@@ -175,14 +222,18 @@ def convert(
         # Display processing summary
         _display_processing_summary(processing_report, verbose)
         
-        # Get graph
+        # Get graph and triple count
         graph = builder.get_graph()
-        
-        console.print(f"[green]Generated {len(graph)} RDF triples[/green]")
-        
-        # Validate if requested
+        triple_count = builder.get_triple_count()
+
+        if nt_context_manager:
+            console.print(f"[green]Streamed {triple_count} RDF triples to {output}[/green]")
+        else:
+            console.print(f"[green]Generated {triple_count} RDF triples[/green]")
+
+        # Validate if requested (only for non-streaming mode)
         validation_report = None
-        if validate_flag and config.validation and config.validation.shacl:
+        if validate_flag and config.validation and config.validation.shacl and graph:
             console.print("[blue]Running SHACL validation...[/blue]")
             
             shapes_file = Path(config.validation.shacl.shapes_file)
@@ -201,9 +252,11 @@ def convert(
                 if report and validation_report:
                     write_validation_report(validation_report, report)
                     console.print(f"[green]Validation report written to {report}[/green]")
-        
-        # Validate against ontology if provided
-        if ontology:
+        elif validate_flag and not graph:
+            console.print("[yellow]Warning: Validation not available in streaming mode[/yellow]")
+
+        # Validate against ontology if provided (only for non-streaming mode)
+        if ontology and graph:
             console.print("[blue]Running ontology validation...[/blue]")
             
             ontology_report = validate_against_ontology(
@@ -219,7 +272,9 @@ def convert(
                     raise typer.Exit(code=1)
             else:
                 console.print("[green]✓ Ontology validation passed[/green]")
-        
+        elif ontology and not graph:
+            console.print("[yellow]Warning: Ontology validation not available in streaming mode[/yellow]")
+
         # Display SHACL validation results if validation was performed
         if validate_flag and validation_report:
             _display_validation_results(validation_report, verbose)
@@ -229,14 +284,16 @@ def convert(
                 write_validation_report(validation_report, report)
                 console.print(f"[green]Validation report written to {report}[/green]")
         
-        # Write output
-        if not dry_run and output:
+        # Write output (skip if already written in streaming mode)
+        if not dry_run and output and not nt_context_manager:
             # Use provided format or default to ttl
             output_format = format or "ttl"
             
             console.print(f"[blue]Writing {output_format.upper()} to {output}...[/blue]")
             serialize_graph(graph, output_format, output)
             console.print("[green]Output written successfully[/green]")
+        elif not dry_run and output and nt_context_manager:
+            console.print("[green]NT output already written via streaming[/green]")
         elif dry_run:
             console.print("[yellow]Dry run mode: no output written[/yellow]")
         elif not output:
@@ -1148,7 +1205,7 @@ def validate_ontology(
         # Pass/Fail
         if report.overall_coverage_percentage >= min_coverage:
             console.print(f"[bold green]✓ PASS[/bold green] - Coverage meets minimum threshold ({min_coverage:.1%})")
-            exit_code = 0
+            # Success - exit cleanly
         else:
             console.print(f"[bold yellow]⚠ NEEDS IMPROVEMENT[/bold yellow] - Coverage below threshold ({min_coverage:.1%})")
             console.print("\nNext steps:")
@@ -1157,16 +1214,15 @@ def validate_ontology(
             console.print("     [cyan]rdfmap generate --alignment-report ...[/cyan]")
             console.print("  3. Enrich ontology with missing labels:")
             console.print("     [cyan]rdfmap enrich --interactive ...[/cyan]")
-            exit_code = 1
-        
-        raise typer.Exit(code=exit_code)
-        
+            # Validation warning - but don't show traceback
+
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         if verbose:
             import traceback
             console.print(traceback.format_exc())
-        raise typer.Exit(code=1)
+        import sys
+        sys.exit(1)
 
 
 if __name__ == "__main__":

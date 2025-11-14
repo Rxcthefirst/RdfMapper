@@ -2,8 +2,12 @@
 
 from typing import Dict, List, Optional, Any
 from pathlib import Path
-import pandas as pd
+import polars as pl
 import re
+
+# Import Polars helper functions
+from .polars_helpers import (_infer_polars_type, _suggest_xsd_datatype_polars,
+                           _is_likely_identifier_polars, _detect_pattern_polars)
 
 
 class ColumnAnalysis:
@@ -48,22 +52,22 @@ class SpreadsheetAnalyzer:
         
         Args:
             file_path: Path to CSV or Excel file
-            sample_size: Number of rows to analyze (for performance)
+            sample_size: Number of rows to analyze
         """
         self.file_path = Path(file_path)
         self.sample_size = sample_size
-        self.df: Optional[pd.DataFrame] = None
+        self.df: Optional[pl.DataFrame] = None
         self.columns: Dict[str, ColumnAnalysis] = {}
         
         self._load_and_analyze()
     
     def _load_and_analyze(self):
         """Load the spreadsheet and perform analysis."""
-        # Load data
+        # Load data using Polars
         if self.file_path.suffix.lower() in [".xlsx", ".xls"]:
-            self.df = pd.read_excel(self.file_path, nrows=self.sample_size)
+            self.df = pl.read_excel(self.file_path).head(self.sample_size)
         elif self.file_path.suffix.lower() == ".csv":
-            self.df = pd.read_csv(self.file_path, nrows=self.sample_size)
+            self.df = pl.read_csv(self.file_path, n_rows=self.sample_size)
         else:
             raise ValueError(f"Unsupported file format: {self.file_path.suffix}")
         
@@ -74,137 +78,34 @@ class SpreadsheetAnalyzer:
     def _analyze_column(self, col_name: str) -> ColumnAnalysis:
         """Analyze a single column."""
         analysis = ColumnAnalysis(col_name)
-        
-        series = self.df[col_name]
-        analysis.total_count = len(series)
-        analysis.null_count = series.isna().sum()
-        
+
+        column = self.df[col_name]
+        analysis.total_count = len(self.df)
+        analysis.null_count = column.null_count()
+
         # Get non-null values
-        non_null = series.dropna()
+        non_null = column.drop_nulls()
         if len(non_null) == 0:
             return analysis
         
         # Sample values (up to 5)
-        analysis.sample_values = non_null.head(5).tolist()
-        
+        analysis.sample_values = non_null.head(5).to_list()
+
         # Check uniqueness
-        analysis.is_unique = len(non_null.unique()) == len(non_null)
-        
-        # Infer Python type
-        analysis.inferred_type = self._infer_python_type(non_null)
-        
-        # Suggest XSD datatype
-        analysis.suggested_datatype = self._suggest_xsd_datatype(non_null, col_name)
-        
-        # Check if this looks like an identifier
-        analysis.is_identifier = self._is_identifier_column(col_name, non_null)
-        
-        # Extract pattern (for strings)
+        analysis.is_unique = non_null.n_unique() == len(non_null)
+
+        # Use imported Polars helper functions
+        analysis.inferred_type = _infer_polars_type(column)
+        analysis.suggested_datatype = _suggest_xsd_datatype_polars(column)
+        analysis.is_identifier = _is_likely_identifier_polars(col_name, column)
+
+        # Extract pattern for strings
         if analysis.inferred_type == "string":
-            analysis.pattern = self._extract_pattern(non_null)
-        
+            analysis.pattern = _detect_pattern_polars(column)
+
         return analysis
     
-    def _infer_python_type(self, series: pd.Series) -> str:
-        """Infer the Python type of a series."""
-        dtype = series.dtype
-        
-        if pd.api.types.is_integer_dtype(dtype):
-            return "integer"
-        elif pd.api.types.is_float_dtype(dtype):
-            return "float"
-        elif pd.api.types.is_bool_dtype(dtype):
-            return "boolean"
-        elif pd.api.types.is_datetime64_any_dtype(dtype):
-            return "datetime"
-        else:
-            # Try to parse as date
-            if self._looks_like_date(series):
-                return "date"
-            return "string"
-    
-    def _looks_like_date(self, series: pd.Series) -> bool:
-        """Check if a string series looks like dates."""
-        # Sample a few values
-        sample = series.head(10)
-        date_count = 0
-        
-        for val in sample:
-            if pd.isna(val):
-                continue
-            try:
-                pd.to_datetime(val)
-                date_count += 1
-            except (ValueError, TypeError):
-                pass
-        
-        # If more than 80% parse as dates, it's probably a date column
-        return date_count > len(sample) * 0.8
-    
-    def _suggest_xsd_datatype(self, series: pd.Series, col_name: str) -> str:
-        """Suggest an XSD datatype based on column analysis."""
-        inferred = self._infer_python_type(series)
-        
-        if inferred == "integer":
-            return "xsd:integer"
-        elif inferred == "float":
-            # Check if it's a decimal (e.g., money, rates)
-            if any(term in col_name.lower() for term in ["amount", "price", "rate", "balance", "principal"]):
-                return "xsd:decimal"
-            return "xsd:double"
-        elif inferred == "boolean":
-            return "xsd:boolean"
-        elif inferred == "datetime":
-            return "xsd:dateTime"
-        elif inferred == "date":
-            return "xsd:date"
-        else:
-            # String - check for URI patterns
-            if self._looks_like_uri(series):
-                return "xsd:anyURI"
-            return "xsd:string"
-    
-    def _looks_like_uri(self, series: pd.Series) -> bool:
-        """Check if values look like URIs."""
-        sample = series.head(10)
-        uri_pattern = re.compile(r'^https?://')
-        
-        uri_count = sum(1 for val in sample if pd.notna(val) and uri_pattern.match(str(val)))
-        return uri_count > len(sample) * 0.8
-    
-    def _is_identifier_column(self, col_name: str, series: pd.Series) -> bool:
-        """Determine if a column is likely an identifier."""
-        name_lower = col_name.lower()
-        
-        # Check for ID-like names
-        id_patterns = ["id", "code", "key", "number", "identifier"]
-        has_id_name = any(pattern in name_lower for pattern in id_patterns)
-        
-        # Check uniqueness
-        is_unique = len(series.unique()) == len(series)
-        
-        return has_id_name or is_unique
-    
-    def _extract_pattern(self, series: pd.Series) -> Optional[str]:
-        """Extract common pattern from string values."""
-        # Sample first few values
-        sample = [str(val) for val in series.head(10) if pd.notna(val)]
-        
-        if not sample:
-            return None
-        
-        # Look for common patterns
-        if all(val.isdigit() for val in sample):
-            return "numeric_string"
-        
-        if all(re.match(r'^[A-Z]+\d+$', val) for val in sample):
-            return "alphanumeric_code"
-        
-        if all('@' in val for val in sample):
-            return "email"
-        
-        return None
-    
+
     def get_identifier_columns(self) -> List[ColumnAnalysis]:
         """Get columns that look like identifiers."""
         return [col for col in self.columns.values() if col.is_identifier]

@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 
 from .ontology_analyzer import OntologyAnalyzer, OntologyClass, OntologyProperty
 from .data_analyzer import DataSourceAnalyzer, DataFieldAnalysis
+from .semantic_matcher import SemanticMatcher
+from .matchers import create_default_pipeline, MatcherPipeline, MatchContext
 from ..models.alignment import (
     AlignmentReport,
     AlignmentStatistics,
@@ -47,6 +49,8 @@ class MappingGenerator:
         ontology_file: str,
         data_file: str,
         config: GeneratorConfig,
+        matcher_pipeline: Optional[MatcherPipeline] = None,
+        use_semantic_matching: bool = True,
     ):
         """
         Initialize the mapping generator.
@@ -55,12 +59,23 @@ class MappingGenerator:
             ontology_file: Path to ontology file
             data_file: Path to data file (CSV, XLSX, JSON, or XML)
             config: Generator configuration
+            matcher_pipeline: Optional custom matcher pipeline (creates default if None)
+            use_semantic_matching: Whether to use semantic embeddings (default: True)
         """
         self.config = config
         self.ontology_file = ontology_file
         self.data_file = data_file
         self.ontology = OntologyAnalyzer(ontology_file, imports=config.imports)
         self.data_source = DataSourceAnalyzer(data_file)
+        # Initialize matcher pipeline
+        if matcher_pipeline:
+            self.matcher_pipeline = matcher_pipeline
+        else:
+            self.matcher_pipeline = create_default_pipeline(
+                use_semantic=use_semantic_matching,
+                semantic_threshold=config.min_confidence
+            )
+        self.semantic_matcher = SemanticMatcher() if use_semantic_matching else None
 
         self.mapping: Dict[str, Any] = {}
         self.alignment_report: Optional[AlignmentReport] = None
@@ -267,7 +282,7 @@ class MappingGenerator:
                 self._unmapped_columns.append(col_name)
         
         return mappings
-    
+
     def _match_column_to_property(
         self,
         col_name: str,
@@ -275,78 +290,25 @@ class MappingGenerator:
         properties: List[OntologyProperty],
     ) -> Optional[Tuple[OntologyProperty, MatchType, str]]:
         """
-        Match a column to an ontology property using multiple strategies.
-        
-        Matching priority:
-        1. Exact match with SKOS prefLabel
-        2. Exact match with rdfs:label
-        3. Exact match with SKOS altLabel
-        4. Exact match with SKOS hiddenLabel
-        5. Exact match with local name
-        6. Partial match with any label
-        7. Fuzzy match with local name
-        
+        Match a column to an ontology property using the matcher pipeline.
+
         Returns:
             Tuple of (property, match_type, matched_via) or None if no match found
         """
-        col_lower = col_name.lower().replace("_", "").replace(" ", "")
-        
-        # Priority 1: Exact match with SKOS prefLabel
-        for prop in properties:
-            if prop.pref_label:
-                pref_label_clean = prop.pref_label.lower().replace("_", "").replace(" ", "")
-                if col_lower == pref_label_clean:
-                    return (prop, MatchType.EXACT_PREF_LABEL, prop.pref_label)
-        
-        # Priority 2: Exact match with rdfs:label
-        for prop in properties:
-            if prop.label:
-                prop_label_clean = prop.label.lower().replace("_", "").replace(" ", "")
-                if col_lower == prop_label_clean:
-                    return (prop, MatchType.EXACT_LABEL, prop.label)
-        
-        # Priority 3: Exact match with SKOS altLabel
-        for prop in properties:
-            for alt_label in prop.alt_labels:
-                alt_label_clean = alt_label.lower().replace("_", "").replace(" ", "")
-                if col_lower == alt_label_clean:
-                    return (prop, MatchType.EXACT_ALT_LABEL, alt_label)
-        
-        # Priority 4: Exact match with SKOS hiddenLabel
-        for prop in properties:
-            for hidden_label in prop.hidden_labels:
-                hidden_label_clean = hidden_label.lower().replace("_", "").replace(" ", "")
-                if col_lower == hidden_label_clean:
-                    return (prop, MatchType.EXACT_HIDDEN_LABEL, hidden_label)
-        
-        # Priority 5: Exact match with local name
-        for prop in properties:
-            local_name = str(prop.uri).split("#")[-1].split("/")[-1]
-            local_clean = local_name.lower().replace("_", "")
-            if col_lower == local_clean:
-                return (prop, MatchType.EXACT_LOCAL_NAME, local_name)
-        
-        # Priority 6: Partial match with any label (pref, rdfs, alt)
-        for prop in properties:
-            all_labels = []
-            if prop.pref_label:
-                all_labels.append(prop.pref_label)
-            if prop.label:
-                all_labels.append(prop.label)
-            all_labels.extend(prop.alt_labels)
-            
-            for label in all_labels:
-                label_clean = label.lower().replace("_", "").replace(" ", "")
-                if col_lower in label_clean or label_clean in col_lower:
-                    return (prop, MatchType.PARTIAL, label)
-        
-        # Priority 7: Fuzzy match with local name
-        for prop in properties:
-            local_name = str(prop.uri).split("#")[-1].split("/")[-1]
-            local_clean = local_name.lower().replace("_", "")
-            if col_lower in local_clean or local_clean in col_lower:
-                return (prop, MatchType.FUZZY, local_name)
-        
+        # Create match context
+        context = MatchContext(
+            column=col_analysis,
+            all_columns=[self.data_source.get_analysis(c) for c in self.data_source.get_column_names()],
+            available_properties=properties,
+            domain_hints=None  # TODO: Add domain detection
+        )
+
+        # Use matcher pipeline
+        result = self.matcher_pipeline.match(col_analysis, properties, context)
+
+        if result:
+            return (result.property, result.match_type, result.matched_via)
+
         return None
     
     def _build_ontology_context(self, target_class: OntologyClass) -> 'OntologyContext':
