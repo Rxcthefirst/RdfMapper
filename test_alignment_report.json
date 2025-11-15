@@ -1,0 +1,87 @@
+{
+  "metadata": {
+    "generated_at": "2025-11-14T23:53:26.883805",
+    "data_source": "examples/mortgage/data/loans.csv",
+    "ontology": "examples/mortgage/ontology/mortgage.ttl",
+    "target_class": "MortgageLoan",
+    "generation_time_seconds": 1.23
+  },
+  "statistics": {
+    "total_columns": 4,
+    "mapped_columns": 3,
+    "unmapped_columns": 1,
+    "mapping_success_rate": 75.0,
+    "average_confidence": 0.897,
+    "high_confidence_count": 2,
+    "medium_confidence_count": 1,
+    "low_confidence_count": 0,
+    "high_confidence_rate": 66.67
+  },
+  "matches": [
+    {
+      "column_name": "LoanID",
+      "matched_property": "ex:loanNumber",
+      "matched_property_label": "loan number",
+      "confidence": 0.95,
+      "confidence_level": "high",
+      "match_type": "EXACT_LABEL",
+      "matched_via": "exact match",
+      "alternatives": [],
+      "data_type": "xsd:string",
+      "is_required": true,
+      "assigned_to_object": false,
+      "object_name": null
+    },
+    {
+      "column_name": "Principal",
+      "matched_property": "ex:principalAmount",
+      "matched_property_label": "principal amount",
+      "confidence": 0.92,
+      "confidence_level": "high",
+      "match_type": "SEMANTIC",
+      "matched_via": "semantic similarity",
+      "alternatives": [],
+      "data_type": "xsd:integer",
+      "is_required": true,
+      "assigned_to_object": false,
+      "object_name": null
+    },
+    {
+      "column_name": "Status",
+      "matched_property": "ex:loanStatus",
+      "matched_property_label": "loan status",
+      "confidence": 0.82,
+      "confidence_level": "medium",
+      "match_type": "FUZZY",
+      "matched_via": "fuzzy match",
+      "alternatives": [
+        {
+          "property": "ex:status",
+          "confidence": 0.78
+        },
+        {
+          "property": "ex:currentStatus",
+          "confidence": 0.75
+        }
+      ],
+      "data_type": "xsd:string",
+      "is_required": true,
+      "assigned_to_object": false,
+      "object_name": null
+    },
+    {
+      "column_name": "InternalCode",
+      "matched_property": null,
+      "matched_property_label": null,
+      "confidence": 0.0,
+      "confidence_level": "very_low",
+      "match_type": "none",
+      "matched_via": "",
+      "alternatives": [],
+      "data_type": "xsd:string",
+      "is_required": false,
+      "assigned_to_object": false,
+      "object_name": null
+    }
+  ]
+}

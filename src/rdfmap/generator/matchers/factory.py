@@ -15,6 +15,8 @@ from .history_matcher import HistoryAwareMatcher
 from .structural_matcher import StructuralMatcher
 from .fuzzy_matchers import PartialStringMatcher, FuzzyStringMatcher
 from .graph_matcher import GraphReasoningMatcher, InheritanceAwareMatcher
+from .hierarchy_matcher import PropertyHierarchyMatcher
+from .owl_characteristics_matcher import OWLCharacteristicsMatcher
 
 
 def create_default_pipeline(
@@ -23,15 +25,20 @@ def create_default_pipeline(
     use_history: bool = True,
     use_structural: bool = True,
     use_graph_reasoning: bool = True,
+    use_hierarchy: bool = True,
+    use_owl_characteristics: bool = True,
     semantic_threshold: float = 0.6,
     datatype_threshold: float = 0.7,
     history_threshold: float = 0.6,
     structural_threshold: float = 0.7,
     graph_reasoning_threshold: float = 0.6,
+    hierarchy_threshold: float = 0.65,
+    owl_characteristics_threshold: float = 0.60,
     semantic_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     enable_logging: bool = False,
     enable_calibration: bool = True,
-    reasoner: Optional[any] = None  # GraphReasoner instance
+    reasoner: Optional[any] = None,  # GraphReasoner instance
+    ontology_analyzer: Optional[any] = None  # OntologyAnalyzer instance
 ) -> MatcherPipeline:
     """Create the default matcher pipeline.
 
@@ -41,30 +48,65 @@ def create_default_pipeline(
         use_history: Enable history-aware matching
         use_structural: Enable structural/relationship matching
         use_graph_reasoning: Enable ontology graph reasoning
+        use_hierarchy: Enable property hierarchy reasoning
+        use_owl_characteristics: Enable OWL characteristics reasoning (NEW!)
         semantic_threshold: Threshold for semantic matches (0-1)
         datatype_threshold: Threshold for datatype matches (0-1)
         history_threshold: Threshold for history matches (0-1)
         structural_threshold: Threshold for structural matches (0-1)
         graph_reasoning_threshold: Threshold for graph reasoning matches (0-1)
+        hierarchy_threshold: Threshold for hierarchy matches (0-1)
+        owl_characteristics_threshold: Threshold for OWL characteristics matches (0-1)
         semantic_model: Sentence transformer model name
         enable_logging: Enable detailed matching logger
         enable_calibration: Enable confidence calibration
         reasoner: GraphReasoner instance (required for graph reasoning)
+        ontology_analyzer: OntologyAnalyzer instance (required for hierarchy and OWL reasoning)
 
     Returns:
         Configured MatcherPipeline
     """
     matchers: List[ColumnPropertyMatcher] = [
+        # Exact matchers first (highest confidence)
         ExactPrefLabelMatcher(threshold=1.0),
         ExactRdfsLabelMatcher(threshold=0.95),
         ExactAltLabelMatcher(threshold=0.90),
         ExactHiddenLabelMatcher(threshold=0.85),
         ExactLocalNameMatcher(threshold=0.80),
+    ]
+
+    # Add ontology-based matchers (HIGH priority)
+    # These come after exact matchers but before fuzzy/semantic
+    # because they use ontology structure which is more reliable
+
+    if use_hierarchy and ontology_analyzer is not None:
+        matchers.append(
+            PropertyHierarchyMatcher(
+                ontology_analyzer=ontology_analyzer,
+                enabled=True,
+                threshold=hierarchy_threshold,
+                hierarchy_boost=0.15
+            )
+        )
+
+    if use_owl_characteristics and ontology_analyzer is not None:
+        matchers.append(
+            OWLCharacteristicsMatcher(
+                ontology_analyzer=ontology_analyzer,
+                enabled=True,
+                threshold=owl_characteristics_threshold,
+                ifp_uniqueness_threshold=0.90,
+                fp_uniqueness_threshold=0.95
+            )
+        )
+
+    # Continue with other matchers
+    matchers.extend([
         HistoryAwareMatcher(enabled=use_history, threshold=history_threshold),
         SemanticSimilarityMatcher(enabled=use_semantic, threshold=semantic_threshold, model_name=semantic_model),
         DataTypeInferenceMatcher(enabled=use_datatype, threshold=datatype_threshold),
         StructuralMatcher(enabled=use_structural, threshold=structural_threshold),
-    ]
+    ])
 
     # Add graph reasoning matcher if reasoner provided
     if use_graph_reasoning and reasoner is not None:

@@ -159,7 +159,7 @@ rdfmap convert \
 - Auto-generates linked object relationships
 - Exports JSON Schema for validation
 
-See [docs/MAPPING_GENERATOR.md](docs/MAPPING_GENERATOR.md) for full details.
+See [docs/MAPPING_GENERATOR.md](MAPPING_GENERATOR.md) for full details.
 
 ---
 

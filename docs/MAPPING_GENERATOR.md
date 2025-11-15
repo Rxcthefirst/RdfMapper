@@ -807,6 +807,6 @@ rdfmap generate \
 ## See Also
 
 - [README.md](../README.md) - Main documentation
-- [QUICKSTART.md](../QUICKSTART.md) - Getting started guide
+- [QUICKSTART.md](QUICKSTART.md) - Getting started guide
 - [VALIDATION_GUARDRAILS.md](./VALIDATION_GUARDRAILS.md) - Validation features
 - [ALGORITHM_OVERVIEW.md](../ALGORITHM_OVERVIEW.md) - For business stakeholders

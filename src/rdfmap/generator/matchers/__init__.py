@@ -19,6 +19,8 @@ from .datatype_matcher import DataTypeInferenceMatcher
 from .history_matcher import HistoryAwareMatcher
 from .structural_matcher import StructuralMatcher
 from .fuzzy_matchers import PartialStringMatcher, FuzzyStringMatcher
+from .hierarchy_matcher import PropertyHierarchyMatcher
+from .owl_characteristics_matcher import OWLCharacteristicsMatcher
 from .factory import (
     create_default_pipeline,
     create_exact_only_pipeline,
@@ -50,6 +52,8 @@ __all__ = [
     'DataTypeInferenceMatcher',
     'PartialStringMatcher',
     'FuzzyStringMatcher',
+    'PropertyHierarchyMatcher',
+    'OWLCharacteristicsMatcher',
 
     # Factory functions
     'create_default_pipeline',

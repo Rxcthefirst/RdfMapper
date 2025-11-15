@@ -69,6 +69,8 @@ class DataSourceAnalyzer:
         self.total_rows: int = 0
         self.sample_data: List[Dict[str, Any]] = []
         self.nested_structure: Dict[str, Any] = {}
+        self.has_multiple_sheets: bool = False  # For Excel files
+        self.sheet_count: int = 0  # For Excel files
 
         # Perform analysis
         self._analyze()
@@ -142,6 +144,18 @@ class DataSourceAnalyzer:
     def _analyze_excel(self) -> None:
         """Analyze Excel data."""
         try:
+            # First, check if file has multiple sheets
+            try:
+                from openpyxl import load_workbook
+                wb = load_workbook(self.file_path, read_only=True)
+                self.sheet_count = len(wb.sheetnames)
+                self.has_multiple_sheets = self.sheet_count > 1
+                wb.close()
+            except ImportError:
+                # If openpyxl not available, assume single sheet
+                self.sheet_count = 1
+                self.has_multiple_sheets = False
+
             # Read Excel file using Polars - use first sheet for now
             try:
                 df = pl.read_excel(self.file_path, sheet_name=0)

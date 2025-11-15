@@ -1,275 +1,297 @@
-# Developer Guide
+# Development Guide
 
-## Architecture Overview
+## Getting Started with Development
+
+### Initial Setup
+
+```bash
+# Clone/navigate to repository
+cd SemanticModelDataMapper
+
+# Run installation script
+./install.sh
+
+# Activate virtual environment
+source venv/bin/activate
+```
+
+### Project Architecture
+
+#### Module Organization
 
 ```
 src/rdfmap/
-├── cli/           # Command-line interface (typer-based)
-├── config/        # Configuration loading and validation
-├── parsers/       # Data source parsers (CSV, XLSX, JSON, XML)
-├── analyzer/      # Data and ontology analysis
-├── generator/     # Mapping generation and alignment
-├── emitter/       # RDF graph building and serialization
-├── validator/     # SHACL and SKOS coverage validation
-├── transforms/    # Data transformation utilities
-├── iri/           # IRI template processing
-└── models/        # Pydantic data models and schemas
+├── models/          # Data models (Pydantic schemas)
+├── parsers/         # CSV/XLSX data source parsing
+├── transforms/      # Data transformation functions
+├── iri/            # IRI generation and templating
+├── emitter/        # RDF graph construction (rdflib)
+├── validator/      # SHACL validation (pyshacl)
+├── config/         # Configuration loading
+└── cli/            # Command-line interface (Typer)
 ```
 
-## Key Components
+#### Key Design Patterns
 
-### CLI (`cli/main.py`)
-- Typer-based command-line interface
-- Commands: convert, generate, enrich, validate, stats, info
-- Rich console output with progress indicators
-- Error handling and exit codes
+1. **Configuration-Driven**: All behavior controlled by YAML/JSON mapping files
+2. **Pydantic Models**: Type-safe configuration and error handling
+3. **Registry Pattern**: Extensible transform functions
+4. **Builder Pattern**: Incremental RDF graph construction
+5. **Streaming**: Large file support with chunking
 
-### Configuration (`config/`)
-- YAML/JSON mapping configuration loading
-- Namespace prefix validation
-- Required field checking
-- Schema validation with detailed error messages
+### Development Workflow
 
-### Parsers (`parsers/`)
-- **CSV/TSV**: pandas-based with delimiter detection
-- **Excel**: openpyxl support for multiple sheets
-- **JSON**: Nested object flattening and array handling
-- **XML**: Element-to-row conversion with xpath support
+#### 1. Adding a New Transform
 
-### Analyzer (`analyzer/`)
-- **Data Analysis**: Column type detection, pattern recognition
-- **Ontology Analysis**: Class/property extraction, relationship mapping
-- **Alignment Analysis**: Statistical tracking and trend analysis
+**File**: `src/rdfmap/transforms/functions.py`
 
-### Generator (`generator/`)
-- **Mapping Generation**: Automated configuration creation
-- **Semantic Alignment**: Fuzzy matching with SKOS labels
-- **Confidence Scoring**: Quality metrics for mappings
-- **Enrichment Suggestions**: SKOS label recommendations
-
-### Emitter (`emitter/`)
-- **Graph Building**: RDFLib-based triple generation
-- **IRI Processing**: Template-based URI creation
-- **Serialization**: Multiple format support (TTL, RDF/XML, JSON-LD, N-Triples)
-- **Validation Integration**: SHACL constraint checking
-
-### Validator (`validator/`)
-- **SHACL Validation**: pySHACL integration with inference support
-- **SKOS Coverage**: Label coverage analysis and reporting
-- **Configuration Validation**: Namespace and field validation
-
-## Data Models (`models/`)
-
-### Core Models
-- **MappingConfig**: Complete mapping configuration
-- **SheetConfig**: Individual data source mapping
-- **ColumnMapping**: Field-to-property mapping
-- **ObjectMapping**: Linked entity configuration
-
-### Analysis Models
-- **AlignmentReport**: Semantic alignment analysis results
-- **SKOSCoverageReport**: Ontology label coverage analysis
-- **ProcessingReport**: Data conversion statistics
-
-### Enrichment Models
-- **EnrichmentSuggestion**: SKOS label addition recommendations
-- **EnrichmentResult**: Applied enrichment tracking
-- **ProvenanceInfo**: Change tracking and attribution
-
-## Implementation Details
-
-### Mapping Generation Algorithm
-
-1. **Ontology Analysis**
-   - Extract classes and properties using SPARQL
-   - Build property-to-class relationships
-   - Collect existing SKOS labels for matching
-
-2. **Data Analysis**
-   - Analyze column names, types, and value patterns
-   - Identify potential identifier columns
-   - Detect nested structures and relationships
-
-3. **Semantic Alignment**
-   - Fuzzy string matching between columns and properties
-   - SKOS label matching (exact, partial, hidden)
-   - Confidence scoring based on multiple factors
-   - Threshold-based acceptance/rejection
-
-4. **Configuration Generation**
-   - Create IRI templates from identifier columns
-   - Map high-confidence column-property pairs
-   - Generate object mappings for relationships
-   - Add validation constraints where appropriate
-
-### SKOS Enrichment Process
-
-1. **Gap Analysis**
-   - Identify unmapped columns from alignment reports
-   - Analyze column name patterns and variations
-   - Generate label suggestions (prefLabel, altLabel, hiddenLabel)
-
-2. **Suggestion Generation**
-   - Common abbreviations (emp_num → employeeNumber)
-   - Camel case splitting (firstName → first name)
-   - Domain-specific patterns
-   - Confidence scoring for suggestions
-
-3. **Interactive Application**
-   - Present suggestions with context
-   - Allow editing and annotation
-   - Track provenance information
-   - Batch apply high-confidence suggestions
-
-### Data Processing Pipeline
-
-1. **Configuration Loading**
-   - Parse YAML/JSON mapping files
-   - Validate namespaces and references
-   - Check required fields and templates
-
-2. **Data Parsing**
-   - Auto-detect format and encoding
-   - Handle chunked processing for large files
-   - Apply data transformations
-   - Error handling and reporting
-
-3. **RDF Generation**
-   - Process each row according to mapping
-   - Generate subject URIs from templates
-   - Create property assertions
-   - Handle linked objects and relationships
-
-4. **Validation and Output**
-   - Optional SHACL validation
-   - Multi-format serialization
-   - Progress reporting and statistics
-
-## Testing Strategy
-
-### Unit Tests
-- Individual component testing
-- Mock external dependencies
-- Edge case handling
-- Error condition testing
-
-### Integration Tests
-- End-to-end workflow testing
-- Example validation
-- Performance benchmarking
-- Multi-format compatibility
-
-### Demo Validation
-- Automated example execution
-- Output verification
-- Error-free demonstration runs
-- Documentation accuracy
-
-## Development Workflow
-
-### Setup
-```bash
-git clone <repository>
-cd SemanticModelDataMapper
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-pip install -r requirements-dev.txt
-```
-
-### Testing
-```bash
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=src/rdfmap
-
-# Test examples
-./quickstart_demo.sh
-python examples/demo/run_demo.py
-```
-
-### Code Quality
-```bash
-# Linting
-ruff check src/
-
-# Formatting
-ruff format src/
-
-# Type checking
-mypy src/rdfmap
-```
-
-## Performance Considerations
-
-### Memory Management
-- Chunked data processing for large files
-- Streaming RDF generation
-- Configurable chunk sizes
-- Memory usage monitoring
-
-### Optimization Techniques
-- Lazy loading of ontologies
-- Cached SPARQL queries
-- Efficient string matching algorithms
-- Parallel processing where appropriate
-
-### Scalability
-- Horizontal scaling through chunking
-- Database backend support for large ontologies
-- Distributed processing capabilities
-- Memory-mapped file handling
-
-## Extension Points
-
-### Custom Parsers
-Implement `DataSourceParser` interface for new formats:
 ```python
-class CustomParser(DataSourceParser):
-    def parse(self, chunk_size: int) -> Iterator[pd.DataFrame]:
-        # Implementation
-        pass
-```
-
-### Custom Transforms
-Add data transformation functions:
-```python
-def custom_transform(value: Any, context: Dict) -> Any:
+@register_transform("my_transform")
+def my_transform(value: Any) -> Any:
+    """Description of transform."""
     # Implementation
     return transformed_value
 ```
 
-### Custom Validators
-Extend validation with domain-specific rules:
+**Test**: `tests/test_transforms.py`
+
 ```python
-class CustomValidator:
-    def validate(self, graph: Graph) -> ValidationReport:
-        # Implementation
-        pass
+def test_my_transform():
+    from rdfmap.transforms.functions import my_transform
+    result = my_transform("input")
+    assert result == "expected_output"
 ```
 
-## Deployment
+**Usage**: In mapping config:
 
-### Package Distribution
-- PyPI publishing workflow
-- Version management
-- Dependency specification
-- Documentation packaging
+```yaml
+columns:
+  MyColumn:
+    as: ex:myProperty
+    transform: my_transform
+```
 
-### Docker Containerization
-- Multi-stage builds
-- Minimal runtime images
-- Volume mounting for data
-- Environment configuration
+#### 2. Adding a New Output Format
 
-### CI/CD Pipeline
-- Automated testing
-- Code quality checks
-- Documentation generation
-- Release automation
+**File**: `src/rdfmap/emitter/graph_builder.py`
 
----
+Update `serialize_graph()` function:
 
-This guide provides the technical foundation for understanding and extending the Semantic Model Data Mapper codebase.
+```python
+def serialize_graph(graph: Graph, format: str, output_path: Optional[Path] = None) -> str:
+    format_map = {
+        "turtle": "turtle",
+        "myformat": "myformat",  # Add new format
+        # ...
+    }
+    # ...
+```
+
+#### 3. Extending the Mapping Schema
+
+**File**: `src/rdfmap/models/mapping.py`
+
+Add new fields to Pydantic models:
+
+```python
+class ColumnMapping(BaseModel):
+    # Existing fields...
+    my_new_option: Optional[str] = Field(None, description="New option")
+```
+
+**Update**: Graph builder to handle new option:
+
+```python
+# src/rdfmap/emitter/graph_builder.py
+if column_mapping.my_new_option:
+    # Handle new option
+    pass
+```
+
+### Testing
+
+#### Run All Tests
+
+```bash
+pytest
+```
+
+#### Run Specific Test File
+
+```bash
+pytest tests/test_transforms.py -v
+```
+
+#### Run with Coverage
+
+```bash
+pytest --cov=rdfmap --cov-report=html
+open htmlcov/index.html
+```
+
+#### Test Development Tips
+
+1. **Unit Tests**: Test individual functions in isolation
+2. **Integration Tests**: Test complete workflows (see `test_mortgage_example.py`)
+3. **Use Fixtures**: Share test data across tests
+4. **Parametrize**: Test multiple inputs with `@pytest.mark.parametrize`
+
+### Code Quality
+
+#### Type Checking
+
+```bash
+mypy src/rdfmap
+```
+
+#### Code Formatting
+
+```bash
+# Format code
+black src/ tests/
+
+# Check formatting
+black --check src/ tests/
+```
+
+#### Linting
+
+```bash
+# Run ruff
+ruff check src/ tests/
+
+# Fix auto-fixable issues
+ruff check --fix src/ tests/
+```
+
+### Debugging
+
+#### Enable Verbose Logging
+
+```bash
+rdfmap convert \
+  --mapping config.yaml \
+  --verbose \
+  --log debug.log
+```
+
+#### Python Debugger
+
+Add breakpoint in code:
+
+```python
+import pdb; pdb.set_trace()
+```
+
+Or use VS Code debugger with launch configuration.
+
+#### Test Debugging
+
+```bash
+# Run single test with print output
+pytest tests/test_transforms.py::TestToDecimal::test_decimal_from_string -s
+```
+
+### Common Development Tasks
+
+#### Creating a New Example
+
+1. Create directory: `examples/my_example/`
+2. Add subdirectories: `ontology/`, `data/`, `config/`, `shapes/`
+3. Create ontology in Turtle format
+4. Prepare sample data (CSV/XLSX)
+5. Write mapping configuration
+6. Define SHACL shapes
+7. Add README.md
+8. Add integration test
+
+#### Updating Documentation
+
+- **README.md**: Main documentation
+- **QUICKSTART.md**: Getting started guide
+- **Example READMEs**: Example-specific docs
+- **Docstrings**: Keep in sync with code
+
+#### Release Checklist
+
+1. Update version in `setup.py` and `pyproject.toml`
+2. Run full test suite: `pytest`
+3. Check type hints: `mypy src/rdfmap`
+4. Format code: `black src/ tests/`
+5. Update CHANGELOG.md
+6. Tag release: `git tag v0.1.0`
+7. Build package: `python -m build`
+
+### Troubleshooting Development Issues
+
+#### Import Errors
+
+```bash
+# Reinstall package in development mode
+pip install -e .
+```
+
+#### Test Failures After Changes
+
+```bash
+# Clear pytest cache
+pytest --cache-clear
+```
+
+#### Dependency Issues
+
+```bash
+# Update dependencies
+pip install --upgrade -r requirements.txt
+```
+
+### Performance Optimization
+
+#### Profiling
+
+```python
+import cProfile
+import pstats
+
+profiler = cProfile.Profile()
+profiler.enable()
+
+# Code to profile
+
+profiler.disable()
+stats = pstats.Stats(profiler)
+stats.sort_stats('cumulative')
+stats.print_stats(20)
+```
+
+#### Memory Profiling
+
+```bash
+pip install memory_profiler
+
+# Add @profile decorator to function
+python -m memory_profiler script.py
+```
+
+### Contributing Guidelines
+
+1. **Branch Naming**: `feature/description` or `fix/description`
+2. **Commit Messages**: Clear, descriptive messages
+3. **Pull Requests**: Include tests and documentation
+4. **Code Review**: Address all feedback
+5. **CI/CD**: Ensure all checks pass
+
+### Resources
+
+- **rdflib Documentation**: https://rdflib.readthedocs.io/
+- **Pydantic Documentation**: https://docs.pydantic.dev/
+- **SHACL Specification**: https://www.w3.org/TR/shacl/
+- **OWL 2 Primer**: https://www.w3.org/TR/owl2-primer/
+- **Turtle Specification**: https://www.w3.org/TR/turtle/
+
+### Getting Help
+
+- Check existing tests for usage examples
+- Review similar implementations in codebase
+- Consult documentation links above
+- Open GitHub issue for bugs or feature requests

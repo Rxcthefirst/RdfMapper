@@ -126,6 +126,153 @@ class MappingGenerator:
 
         return self.mapping
     
+    def generate_multisheet(
+        self,
+        output_path: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Generate mapping configuration for Excel workbook with multiple sheets.
+
+        Automatically detects relationships between sheets and generates
+        appropriate mappings for each sheet.
+
+        Args:
+            output_path: Path where the config will be saved
+
+        Returns:
+            Dictionary representation of the mapping configuration
+        """
+        from .multisheet_analyzer import MultiSheetAnalyzer
+
+        self.output_path = Path(output_path) if output_path else None
+
+        # Check if data source has multiple sheets
+        if not self.data_source.has_multiple_sheets:
+            # Fall back to single-sheet generation
+            return self.generate(output_path=output_path)
+
+        # Analyze multi-sheet structure
+        ms_analyzer = MultiSheetAnalyzer(str(self.data_source.file_path))
+        relationships = ms_analyzer.detect_relationships()
+
+        # Get primary sheet
+        primary_sheet = ms_analyzer.get_primary_sheet()
+
+        # Build mapping
+        self.mapping = {
+            "namespaces": self._generate_namespaces(),
+            "defaults": self._generate_defaults(),
+            "sheets": [],
+            "options": self._generate_options(),
+        }
+
+        # Add imports if specified
+        if self.config.imports:
+            self.mapping["imports"] = self.config.imports
+
+        # Generate mapping for each sheet
+        for sheet_name in ms_analyzer.get_sheet_names():
+            sheet_info = ms_analyzer.get_sheet_info(sheet_name)
+
+            # Try to find a matching class for this sheet
+            target_class = self._find_class_for_sheet(sheet_name)
+
+            if not target_class:
+                # Skip sheets we can't map
+                continue
+
+            # Generate sheet mapping
+            sheet_mapping = self._generate_multisheet_mapping(
+                sheet_name,
+                target_class,
+                sheet_info,
+                relationships,
+                is_primary=(sheet_name == primary_sheet)
+            )
+
+            self.mapping["sheets"].append(sheet_mapping)
+
+        return self.mapping
+
+    def _find_class_for_sheet(self, sheet_name: str) -> Optional[OntologyClass]:
+        """Find an ontology class that matches a sheet name.
+
+        Args:
+            sheet_name: Name of the sheet
+
+        Returns:
+            Matching OntologyClass or None
+        """
+        # Try to suggest classes based on sheet name
+        suggestions = self.ontology.suggest_class_for_name(sheet_name)
+
+        if suggestions:
+            return suggestions[0]
+
+        return None
+
+    def _generate_multisheet_mapping(
+        self,
+        sheet_name: str,
+        target_class: OntologyClass,
+        sheet_info: Any,  # SheetInfo from multisheet_analyzer
+        relationships: List[Any],  # List of SheetRelationship
+        is_primary: bool = False
+    ) -> Dict[str, Any]:
+        """Generate mapping for a single sheet in multi-sheet context.
+
+        Args:
+            sheet_name: Name of the sheet
+            target_class: Target ontology class
+            sheet_info: Sheet information from analyzer
+            relationships: Detected relationships
+            is_primary: Whether this is the primary sheet
+
+        Returns:
+            Sheet mapping dictionary
+        """
+        # Create a temporary DataSourceAnalyzer for this sheet
+        # (For now, we'll generate based on the class)
+
+        # Build basic sheet structure
+        sheet_mapping = {
+            "name": sheet_name,
+            "source": str(self.data_source.file_path),
+            "row_resource": {
+                "class": self._format_uri(target_class.uri),
+                "iri_template": self._generate_iri_template(target_class),
+            },
+            "columns": {},
+            "objects": {}
+        }
+
+        # Add sheet-specific metadata
+        if not is_primary:
+            sheet_mapping["_metadata"] = {
+                "sheet_name": sheet_name,
+                "role": "referenced_entity"
+            }
+
+        # Find relationships where this sheet is the source
+        outgoing_rels = [r for r in relationships if r.source_sheet == sheet_name]
+
+        if outgoing_rels:
+            # Add relationship hints
+            sheet_mapping["_relationships"] = [
+                {
+                    "target_sheet": rel.target_sheet,
+                    "foreign_key": rel.source_column,
+                    "referenced_key": rel.target_column,
+                    "type": rel.relationship_type
+                }
+                for rel in outgoing_rels
+            ]
+
+        # For now, generate basic column mappings
+        # (Full implementation would load sheet data and match columns)
+        # This is a placeholder that should be enhanced
+
+        return sheet_mapping
+
     def _resolve_class(self, identifier: str) -> Optional[OntologyClass]:
         """Resolve a class by URI or label."""
         # Try as label first

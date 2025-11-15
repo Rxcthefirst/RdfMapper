@@ -634,16 +634,42 @@ class ConfigurationWizard:
         save_formatted_mapping(mapping, path, wizard_config)
 
 
-def run_wizard(output_path: Optional[str] = None) -> Dict[str, Any]:
+def run_wizard(output_path: Optional[str] = None, template_name: Optional[str] = None) -> Dict[str, Any]:
     """Run the configuration wizard.
 
     Args:
         output_path: Optional path to save configuration
+        template_name: Optional template name to use as starting point
 
     Returns:
         Generated configuration dictionary
     """
     wizard = ConfigurationWizard()
+
+    # If template is specified, show template info
+    if template_name:
+        from ..templates import get_template_library
+
+        library = get_template_library()
+        template = library.get_template(template_name)
+
+        if template:
+            console.print(Panel.fit(
+                f"[bold cyan]Using Template: {template.name}[/bold cyan]\n"
+                f"[dim]{template.description}[/dim]\n\n"
+                f"Domain: {template.domain}",
+                border_style="cyan"
+            ))
+            console.print()
+
+            # Set template context in wizard
+            wizard.config['_template_hint'] = {
+                'name': template.name,
+                'domain': template.domain,
+                'expected_columns': template.template_config.get('expected_columns', []),
+                'target_classes': template.template_config.get('target_classes', [])
+            }
+
     return wizard.run(output_path)
 
 

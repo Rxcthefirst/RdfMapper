@@ -42,6 +42,12 @@ def init(
         "-o",
         help="Path to save the configuration file (default: mapping_config.yaml)",
     ),
+    template: Optional[str] = typer.Option(
+        None,
+        "--template",
+        "-t",
+        help="Use a pre-built template (e.g., financial-loans, healthcare-patients). Use 'rdfmap templates' to list available templates.",
+    ),
 ):
     """
     🎯 Interactive configuration wizard with automatic mapping generation.
@@ -54,17 +60,52 @@ def init(
 
     The wizard uses AI-powered semantic matching to achieve 95%+ success rates.
 
-    Example:
+    You can also use pre-built templates for common domains:
+      - financial-loans, financial-transactions, financial-accounts
+      - healthcare-patients, healthcare-visits
+      - ecommerce-products, ecommerce-orders, ecommerce-customers
+      - academic-students, academic-courses, academic-enrollments
+      - hr-employees, hr-departments
+
+    Examples:
         rdfmap init --output my_mapping.yaml
+        rdfmap init --template financial-loans --output loans_mapping.yaml
         rdfmap convert --mapping my_mapping.yaml --validate
     """
     try:
+        # Check if template is requested
+        if template:
+            from ..templates import get_template_library
+
+            library = get_template_library()
+            template_obj = library.get_template(template)
+
+            if not template_obj:
+                console.print(f"[red]Template not found: {template}[/red]")
+                console.print("\n[yellow]Available templates:[/yellow]")
+                for t in library.list_templates():
+                    console.print(f"  • {t.name} - {t.description}")
+                console.print("\nUse [cyan]rdfmap templates[/cyan] to see all templates with details")
+                raise typer.Exit(1)
+
+            console.print(f"[bold cyan]📋 Using template: {template}[/bold cyan]")
+            console.print(f"[dim]{template_obj.description}[/dim]\n")
+
+            # If template has examples, suggest using them
+            if template_obj.example_ontology and template_obj.example_data:
+                console.print("[yellow]This template includes example files:[/yellow]")
+                console.print(f"  Ontology: {template_obj.example_ontology}")
+                console.print(f"  Data: {template_obj.example_data}\n")
+
         console.print("[bold cyan]🎯 RDFMap Configuration Wizard[/bold cyan]\n")
         console.print("I'll help you create a complete mapping configuration with intelligent")
         console.print("property matching and relationship detection.\n")
 
-        # Run the wizard
-        config = run_wizard(output_path=str(output) if output else None)
+        # Run the wizard (with template hint if provided)
+        config = run_wizard(
+            output_path=str(output) if output else None,
+            template_name=template
+        )
 
         config_path = str(output) if output else "mapping_config.yaml"
 
@@ -382,6 +423,86 @@ def convert(
 
 
 @app.command()
+def review(
+    mapping: Path = typer.Option(
+        ...,
+        "--mapping",
+        "-m",
+        help="Path to mapping configuration file to review",
+        exists=True,
+        dir_okay=False,
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Path to save reviewed mapping (default: overwrites input)",
+        dir_okay=False,
+    ),
+    alignment: Optional[Path] = typer.Option(
+        None,
+        "--alignment",
+        "-a",
+        help="Path to alignment report JSON file (optional)",
+        exists=True,
+        dir_okay=False,
+    ),
+):
+    """
+    🔍 Interactively review and approve/reject generated mappings.
+
+    This command allows you to review each column-to-property mapping,
+    see confidence scores, view alternatives, and make decisions:
+
+    - Accept (y) - Keep the mapping as-is
+    - Reject (n) - Remove the mapping
+    - Modify (m) - Choose an alternative or enter custom property
+    - Accept all (a) - Accept all remaining mappings
+    - Skip (s) - Keep mapping without explicit approval
+
+    Particularly useful for:
+    - Low-confidence matches that need validation
+    - Domain-specific terminology verification
+    - Quality assurance before processing large datasets
+
+    Example:
+        rdfmap generate --ontology onto.ttl --data data.csv --output map.yaml --report
+        rdfmap review --mapping map.yaml --alignment map_alignment.json
+        rdfmap convert --mapping map.yaml
+    """
+    try:
+        from .interactive_review import review_mapping_file
+
+        console.print("[bold cyan]Starting interactive review...[/bold cyan]\n")
+
+        # Run interactive review
+        updated_mapping = review_mapping_file(
+            mapping_file=str(mapping),
+            output_file=str(output) if output else None,
+            alignment_file=str(alignment) if alignment else None
+        )
+
+        console.print("\n[bold green]✓ Review complete![/bold green]")
+
+        # Show next steps
+        output_path = output or mapping
+        console.print(f"\n[bold]Next steps:[/bold]")
+        console.print(f"1. Test the reviewed mapping:")
+        console.print(f"   [cyan]rdfmap convert --mapping {output_path} --limit 10 --dry-run[/cyan]")
+        console.print(f"2. Process your data:")
+        console.print(f"   [cyan]rdfmap convert --mapping {output_path} --validate[/cyan]")
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]⚠ Review cancelled[/yellow]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"\n[red]Error: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+        raise typer.Exit(1)
+
+
+@app.command()
 def validate(
     rdf_file: Path = typer.Option(
         ...,
@@ -628,6 +749,30 @@ def generate(
         console.print(f"  Columns: {len(sheet_analyzer.get_column_names())}")
         console.print(f"  Identifier columns: {sheet_analyzer.suggest_iri_template_columns()}")
 
+        # Check for multiple sheets
+        if sheet_analyzer.has_multiple_sheets:
+            console.print(f"\n[yellow]📊 Multiple sheets detected: {sheet_analyzer.sheet_count} sheets[/yellow]")
+            console.print("[dim]The generator will analyze relationships between sheets...[/dim]")
+
+            from ..generator.multisheet_analyzer import MultiSheetAnalyzer
+
+            try:
+                ms_analyzer = MultiSheetAnalyzer(str(data))
+                relationships = ms_analyzer.detect_relationships()
+
+                if relationships:
+                    console.print(f"\n[green]✓ Found {len(relationships)} relationship(s) between sheets[/green]")
+                    for rel in relationships[:3]:  # Show first 3
+                        console.print(f"  • {rel.source_sheet}.{rel.source_column} → "
+                                    f"{rel.target_sheet}.{rel.target_column} ({rel.relationship_type})")
+                    if len(relationships) > 3:
+                        console.print(f"  ... and {len(relationships) - 3} more")
+                else:
+                    console.print("[yellow]No relationships detected between sheets[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Could not analyze sheet relationships: {e}[/yellow]")
+                console.print("[dim]Continuing with single-sheet analysis...[/dim]")
+
         if analyze_only:
             console.print("\n[bold]Spreadsheet Analysis:[/bold]")
             console.print(sheet_analyzer.summary())
@@ -663,13 +808,20 @@ def generate(
             config,
         )
         
-        # Generate mapping (with alignment report if requested)
-        if alignment_report:
+        # Generate mapping (use multisheet if applicable)
+        if sheet_analyzer.has_multiple_sheets and not target_class:
+            # Multi-sheet mode (auto-detect classes for each sheet)
+            console.print("[cyan]Using multi-sheet generation mode...[/cyan]")
+            mapping = generator.generate_multisheet(output_path=str(output))
+            report = None  # Multi-sheet doesn't support alignment report yet
+        elif alignment_report:
+            # Single-sheet with alignment report
             mapping, report = generator.generate_with_alignment_report(
                 target_class=target_class,
                 output_path=str(output)
             )
         else:
+            # Single-sheet standard
             mapping = generator.generate(target_class=target_class, output_path=str(output))
             report = None
         
@@ -1274,6 +1426,132 @@ def validate_ontology(
             console.print(traceback.format_exc())
         import sys
         sys.exit(1)
+
+
+@app.command()
+def templates(
+    domain: Optional[str] = typer.Option(
+        None,
+        "--domain",
+        "-d",
+        help="Filter templates by domain (financial, healthcare, ecommerce, academic, hr)",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Show detailed information about each template",
+    ),
+):
+    """
+    📋 List available mapping templates for common domains.
+
+    Templates provide pre-built starting points for common use cases,
+    making it faster to get started with standard domain models.
+
+    Available domains:
+      • financial - Loans, transactions, accounts
+      • healthcare - Patients, visits, procedures
+      • ecommerce - Products, orders, customers
+      • academic - Students, courses, enrollments
+      • hr - Employees, departments, positions
+
+    Examples:
+        rdfmap templates                    # List all templates
+        rdfmap templates --domain financial # List financial templates
+        rdfmap templates --verbose          # Show detailed info
+
+        # Use a template:
+        rdfmap init --template financial-loans --output mapping.yaml
+    """
+    try:
+        from ..templates import get_template_library
+        from rich.table import Table
+        from rich import box
+
+        library = get_template_library()
+
+        # Get templates (filtered by domain if specified)
+        template_list = library.list_templates(domain=domain)
+
+        if not template_list:
+            if domain:
+                console.print(f"[yellow]No templates found for domain: {domain}[/yellow]")
+                console.print("\n[bold]Available domains:[/bold]")
+                for d in library.list_domains():
+                    console.print(f"  • {d}")
+            else:
+                console.print("[yellow]No templates available[/yellow]")
+            return
+
+        # Show header
+        console.print("\n" + "="*80)
+        console.print("[bold cyan]📋 Available Mapping Templates[/bold cyan]")
+        console.print("="*80 + "\n")
+
+        if domain:
+            console.print(f"[bold]Domain:[/bold] {domain}\n")
+
+        if verbose:
+            # Detailed view
+            for template in template_list:
+                console.print(f"[bold cyan]{template.name}[/bold cyan]")
+                console.print(f"[dim]Domain:[/dim] {template.domain}")
+                console.print(f"[dim]Description:[/dim] {template.description}")
+
+                if template.example_ontology:
+                    console.print(f"[dim]Example ontology:[/dim] {template.example_ontology}")
+                if template.example_data:
+                    console.print(f"[dim]Example data:[/dim] {template.example_data}")
+
+                config = template.template_config
+                if config.get("expected_columns"):
+                    console.print(f"[dim]Expected columns:[/dim] {', '.join(config['expected_columns'][:5])}" +
+                                (" ..." if len(config['expected_columns']) > 5 else ""))
+                if config.get("target_classes"):
+                    console.print(f"[dim]Target classes:[/dim] {', '.join(config['target_classes'])}")
+                if config.get("relationships"):
+                    console.print(f"[dim]Relationships:[/dim] {', '.join(config['relationships'])}")
+
+                console.print()
+        else:
+            # Table view
+            # Group by domain
+            domains = {}
+            for template in template_list:
+                if template.domain not in domains:
+                    domains[template.domain] = []
+                domains[template.domain].append(template)
+
+            for domain_name in sorted(domains.keys()):
+                console.print(f"[bold]{domain_name.upper()}[/bold]")
+
+                table = Table(show_header=True, box=box.SIMPLE, padding=(0, 2))
+                table.add_column("Template", style="cyan", no_wrap=True)
+                table.add_column("Description", style="white")
+
+                for template in domains[domain_name]:
+                    table.add_row(template.name, template.description)
+
+                console.print(table)
+                console.print()
+
+        # Show usage
+        console.print("[bold]Usage:[/bold]")
+        console.print("  rdfmap init --template <template-name> --output mapping.yaml")
+        console.print("\n[bold]Examples:[/bold]")
+        console.print("  rdfmap init --template financial-loans --output loans.yaml")
+        console.print("  rdfmap init --template healthcare-patients --output patients.yaml")
+        console.print("  rdfmap init --template ecommerce-orders --output orders.yaml")
+
+        console.print("\n[dim]Tip: Use --verbose to see detailed information about each template[/dim]")
+        console.print("="*80 + "\n")
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
