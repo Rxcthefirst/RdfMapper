@@ -524,7 +524,7 @@ class DataSourceAnalyzer:
             return score
 
         candidates.sort(key=sort_key, reverse=True)
-        return candidates[:6]  # Return top 6 candidates
+        return candidates[:1]  # Return only the best candidate for IRI template
 
     def get_nested_fields(self) -> Dict[str, List[str]]:
         """Get nested field relationships for JSON/XML data."""

@@ -219,19 +219,373 @@ class AlignmentReport(BaseModel):
             f"  Low (0.3-0.5):    {stats.low_confidence_matches}",
             f"  Very Low (<0.3):  {stats.very_low_confidence_matches}",
             f"  Average: {stats.average_confidence:.2f}",
-            "",
         ]
-        
+
         if self.unmapped_columns:
-            lines.append(f"⚠️  {len(self.unmapped_columns)} unmapped columns need attention")
-        
+            lines.extend([
+                "",
+                f"Unmapped Columns ({len(self.unmapped_columns)}):",
+            ])
+            for col in self.unmapped_columns[:5]:
+                lines.append(f"  - {col.column_name}")
+            if len(self.unmapped_columns) > 5:
+                lines.append(f"  ... and {len(self.unmapped_columns) - 5} more")
+
         if self.weak_matches:
-            lines.append(f"⚠️  {len(self.weak_matches)} weak matches need review")
-        
-        if self.skos_enrichment_suggestions:
-            lines.append(f"💡 {len(self.skos_enrichment_suggestions)} SKOS enrichment suggestions available")
-        
+            lines.extend([
+                "",
+                f"Weak Matches Requiring Review ({len(self.weak_matches)}):",
+            ])
+            for match in self.weak_matches[:5]:
+                lines.append(f"  - {match.column_name} → {match.matched_property} "
+                           f"(confidence: {match.confidence_score:.2f})")
+            if len(self.weak_matches) > 5:
+                lines.append(f"  ... and {len(self.weak_matches) - 5} more")
+
         return "\n".join(lines)
+
+    def print_rich_terminal(self, show_details: bool = True) -> None:
+        """Print alignment report to terminal with Rich formatting.
+
+        Args:
+            show_details: Whether to show detailed match tables
+        """
+        try:
+            from rich.console import Console
+            from rich.table import Table
+            from rich import box
+            from pathlib import Path
+
+            console = Console()
+            stats = self.statistics
+
+            # Header
+            console.print("\n" + "="*80)
+            console.print("[bold cyan]📊 Semantic Alignment Report[/bold cyan]")
+            console.print("="*80 + "\n")
+
+            # Metadata
+            console.print(f"[dim]Generated: {self.generated_at.strftime('%Y-%m-%d %H:%M:%S')}[/dim]")
+            console.print(f"[dim]Data: {Path(self.spreadsheet_file).name}[/dim]")
+            console.print(f"[dim]Ontology: {Path(self.ontology_file).name}[/dim]\n")
+
+            # Summary statistics
+            console.print("[bold]Overall Quality:[/bold]")
+            success_color = "green" if stats.mapping_success_rate >= 0.9 else "yellow" if stats.mapping_success_rate >= 0.7 else "red"
+            console.print(f"  • Mapping Success Rate: [{success_color}]{stats.mapping_success_rate:.1%}[/{success_color}] "
+                         f"({stats.mapped_columns}/{stats.total_columns} columns)")
+
+            conf_color = "green" if stats.average_confidence >= 0.8 else "yellow" if stats.average_confidence >= 0.6 else "red"
+            console.print(f"  • Average Confidence: [{conf_color}]{stats.average_confidence:.2f}[/{conf_color}]\n")
+
+            # Confidence breakdown
+            console.print("[bold]Confidence Distribution:[/bold]")
+            console.print(f"  • [green]High (≥0.8):[/green] {stats.high_confidence_matches} columns")
+            console.print(f"  • [yellow]Medium (0.5-0.79):[/yellow] {stats.medium_confidence_matches} columns")
+            console.print(f"  • [red]Low (<0.5):[/red] {stats.low_confidence_matches + stats.very_low_confidence_matches} columns")
+            if stats.unmapped_columns > 0:
+                console.print(f"  • [red]Unmapped:[/red] {stats.unmapped_columns} columns\n")
+            else:
+                console.print()
+
+            if show_details:
+                # Weak matches needing review
+                if self.weak_matches:
+                    console.print("[bold yellow]⚠ Matches Requiring Review[/bold yellow]")
+                    table = Table(show_header=True, box=box.SIMPLE)
+                    table.add_column("Column", style="cyan")
+                    table.add_column("Property", style="yellow")
+                    table.add_column("Confidence", justify="right")
+                    table.add_column("Match Type")
+
+                    for match in self.weak_matches[:10]:
+                        table.add_row(
+                            match.column_name,
+                            match.matched_property.split('#')[-1].split('/')[-1],
+                            f"{match.confidence_score:.2f}",
+                            match.match_type.value
+                        )
+
+                    console.print(table)
+                    if len(self.weak_matches) > 10:
+                        console.print(f"  [dim]... and {len(self.weak_matches) - 10} more[/dim]\n")
+                    else:
+                        console.print()
+
+                # Unmapped columns
+                if self.unmapped_columns:
+                    console.print("[bold red]✗ Unmapped Columns[/bold red]")
+                    table = Table(show_header=True, box=box.SIMPLE)
+                    table.add_column("Column", style="cyan")
+                    table.add_column("Type", style="dim")
+                    table.add_column("Sample", style="dim")
+                    table.add_column("Reason")
+
+                    for col in self.unmapped_columns[:10]:
+                        sample = str(col.sample_values[0]) if col.sample_values else ""
+                        if len(sample) > 30:
+                            sample = sample[:27] + "..."
+
+                        table.add_row(
+                            col.column_name,
+                            col.inferred_datatype or "unknown",
+                            sample,
+                            col.reason
+                        )
+
+                    console.print(table)
+                    if len(self.unmapped_columns) > 10:
+                        console.print(f"  [dim]... and {len(self.unmapped_columns) - 10} more[/dim]\n")
+                    else:
+                        console.print()
+
+            console.print("="*80 + "\n")
+
+        except ImportError:
+            # Fallback to simple print if Rich is not available
+            print(self.summary_message())
+
+    def export_html(self, output_path: str) -> None:
+        """Export alignment report as HTML file.
+
+        Args:
+            output_path: Path to save HTML file
+        """
+        from pathlib import Path
+
+        stats = self.statistics
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alignment Report - {Path(self.spreadsheet_file).name}</title>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f5f5f5;
+            color: #333;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }}
+        .header h1 {{
+            margin: 0 0 10px 0;
+            font-size: 28px;
+        }}
+        .header .meta {{
+            opacity: 0.9;
+            font-size: 14px;
+        }}
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }}
+        .stat-card {{
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .stat-card .label {{
+            color: #666;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }}
+        .stat-card .value {{
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }}
+        .stat-card .sub {{
+            color: #999;
+            font-size: 14px;
+            margin-top: 5px;
+        }}
+        .section {{
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .section h2 {{
+            margin-top: 0;
+            color: #667eea;
+            font-size: 20px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }}
+        th {{
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #666;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        td {{
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }}
+        .badge {{
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }}
+        .badge-high {{ background: #d4edda; color: #155724; }}
+        .badge-medium {{ background: #fff3cd; color: #856404; }}
+        .badge-low {{ background: #f8d7da; color: #721c24; }}
+        .confidence {{ font-weight: 600; }}
+        .confidence-high {{ color: #28a745; }}
+        .confidence-medium {{ color: #ffc107; }}
+        .confidence-low {{ color: #dc3545; }}
+        .footer {{
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            margin-top: 40px;
+            padding: 20px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Semantic Alignment Report</h1>
+        <div class="meta">
+            <div>Data: {Path(self.spreadsheet_file).name}</div>
+            <div>Ontology: {Path(self.ontology_file).name}</div>
+            <div>Generated: {self.generated_at.strftime('%Y-%m-%d %H:%M:%S')}</div>
+        </div>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="label">Success Rate</div>
+            <div class="value">{stats.mapping_success_rate:.0%}</div>
+            <div class="sub">{stats.mapped_columns}/{stats.total_columns} columns</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Avg Confidence</div>
+            <div class="value">{stats.average_confidence:.2f}</div>
+            <div class="sub">across all mappings</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">High Confidence</div>
+            <div class="value">{stats.high_confidence_matches}</div>
+            <div class="sub">≥ 0.8 threshold</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Needs Review</div>
+            <div class="value">{stats.medium_confidence_matches + stats.low_confidence_matches}</div>
+            <div class="sub">< 0.8 confidence</div>
+        </div>
+    </div>
+"""
+
+        # Weak matches section
+        if self.weak_matches:
+            html += """
+    <div class="section">
+        <h2>⚠ Matches Requiring Review</h2>
+        <p style="color: #856404; font-size: 14px; margin-bottom: 15px;">
+            These mappings have moderate to low confidence. Please review and validate.
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Column</th>
+                    <th>Property</th>
+                    <th>Confidence</th>
+                    <th>Match Type</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+            for match in self.weak_matches:
+                conf_class = "high" if match.confidence_score >= 0.8 else "medium" if match.confidence_score >= 0.5 else "low"
+                property_short = match.matched_property.split('#')[-1].split('/')[-1]
+                html += f"""
+                <tr>
+                    <td><strong>{match.column_name}</strong></td>
+                    <td>{property_short}</td>
+                    <td><span class="confidence confidence-{conf_class}">{match.confidence_score:.2f}</span></td>
+                    <td><span class="badge badge-{conf_class}">{match.match_type.value}</span></td>
+                </tr>
+"""
+            html += """
+            </tbody>
+        </table>
+    </div>
+"""
+
+        # Unmapped columns section
+        if self.unmapped_columns:
+            html += """
+    <div class="section">
+        <h2>✗ Unmapped Columns</h2>
+        <p style="color: #721c24; font-size: 14px; margin-bottom: 15px;">
+            These columns could not be automatically mapped. Manual review required.
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Column</th>
+                    <th>Data Type</th>
+                    <th>Sample Value</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+            for col in self.unmapped_columns:
+                sample = str(col.sample_values[0]) if col.sample_values else ""
+                if len(sample) > 50:
+                    sample = sample[:47] + "..."
+
+                html += f"""
+                <tr>
+                    <td><strong>{col.column_name}</strong></td>
+                    <td>{col.inferred_datatype or 'unknown'}</td>
+                    <td><code>{sample}</code></td>
+                    <td>{col.reason}</td>
+                </tr>
+"""
+            html += """
+            </tbody>
+        </table>
+    </div>
+"""
+
+        html += """
+    <div class="footer">
+        <p>Generated by RDFMap Semantic Alignment System</p>
+    </div>
+</body>
+</html>
+"""
+
+        with open(output_path, 'w') as f:
+            f.write(html)
 
 
 def calculate_confidence_score(match_type: MatchType, similarity: float = 1.0) -> float:

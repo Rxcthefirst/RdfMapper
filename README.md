@@ -30,6 +30,7 @@ See [FINAL_ACHIEVEMENT_REPORT.md](docs/FINAL_ACHIEVEMENT_REPORT.md) for complete
 - **XML**: Structured documents with namespace support
 
 ### 🧠 **Intelligent Semantic Mapping**
+- **🆕 Interactive Configuration Wizard**: Step-by-step guided setup with smart defaults and data analysis
 - **🆕 Graph Reasoning**: Deep ontology structure analysis with class hierarchy navigation, property inheritance, and domain/range validation
 - **🆕 Semantic Embeddings**: AI-powered matching using BERT models (15-25% more columns mapped!)
 - **🆕 Plugin Architecture**: Extensible matcher pipeline for custom matching strategies
@@ -88,7 +89,24 @@ pip install -e ".[dev]"
 
 ## Quick Start
 
-### 1. Run the Mortgage Example
+### 1. 🆕 Use the Interactive Wizard (Easiest!)
+
+```bash
+# Let the wizard guide you through configuration
+rdfmap init
+
+# Answer simple questions:
+#   - Where's your data file?
+#   - Where's your ontology?
+#   - What's your target class?
+#   - What's your priority (speed/memory/quality)?
+
+# Then generate and convert!
+rdfmap generate --config mapping_config.yaml
+rdfmap convert --mapping mapping_config.yaml
+```
+
+### 2. Run the Mortgage Example
 
 ```bash
 # Convert mortgage loans data to RDF with validation
@@ -115,7 +133,7 @@ rdfmap generate \
   --export-schema
 ```
 
-### 2. Understanding the Mortgage Example
+### 3. Understanding the Mortgage Example
 
 The example converts loan data with this structure:
 

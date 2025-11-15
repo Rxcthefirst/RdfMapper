@@ -159,13 +159,28 @@ class MappingGenerator:
         return None
     
     def _generate_namespaces(self) -> Dict[str, str]:
-        """Generate namespace declarations."""
-        namespaces = self.ontology.get_namespaces()
-        
-        # Ensure xsd is included
-        if "xsd" not in namespaces:
-            namespaces["xsd"] = "http://www.w3.org/2001/XMLSchema#"
-        
+        """Generate namespace declarations - only essential ones."""
+        # Start with essential standard namespaces
+        namespaces = {
+            "xsd": "http://www.w3.org/2001/XMLSchema#",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+        }
+
+        # Add ontology-specific namespaces
+        ontology_ns = self.ontology.get_namespaces()
+
+        # Exclude these standard/common vocabularies
+        excluded_prefixes = {'owl', 'rdf', 'xsd', 'rdfs', 'xml', 'skos', 'dcterms', 'dc',
+                            'foaf', 'doap', 'geo', 'void', 'dcat', 'prov', 'qb', 'csvw'}
+        excluded_domains = ['w3.org', 'schema.org', 'purl.org', 'brickschema', 'xmlns.com',
+                           'usefulinc.com', 'opengis.net', 'rdfs.org']
+
+        for prefix, uri in ontology_ns.items():
+            # Only include non-standard namespaces (domain-specific ones)
+            if prefix not in excluded_prefixes and \
+               not any(domain in uri for domain in excluded_domains):
+                namespaces[prefix] = uri
+
         return namespaces
     
     def _generate_defaults(self) -> Dict[str, Any]:
@@ -200,7 +215,7 @@ class MappingGenerator:
         
         # Generate IRI template
         iri_template = self._generate_iri_template(target_class)
-        
+
         # Map columns to properties
         column_mappings = self._generate_column_mappings(target_class)
         
@@ -216,14 +231,24 @@ class MappingGenerator:
             },
             "columns": column_mappings,
         }
-        
+
         if object_mappings:
             sheet["objects"] = object_mappings
-        
+
         return sheet
-    
-    def _generate_iri_template(self, target_class: OntologyClass) -> str:
-        """Generate IRI template for the target class."""
+
+    def _generate_iri_template(self, target_class: OntologyClass, for_object: bool = False,
+                               object_class: Optional[OntologyClass] = None) -> str:
+        """Generate IRI template for the target class.
+
+        Args:
+            target_class: The class to generate template for
+            for_object: Whether this is for a linked object
+            object_class: If for_object, the object's class
+
+        Returns:
+            IRI template string using {base_iri} placeholder
+        """
         # Get suggested identifier columns
         id_cols = self.data_source.suggest_iri_template_columns()
 
@@ -232,13 +257,23 @@ class MappingGenerator:
             id_cols = [self.data_source.get_column_names()[0]]
 
         # Use class name or default prefix
-        class_name = target_class.label or self.config.default_class_prefix
+        if for_object and object_class:
+            class_name = object_class.label or "object"
+            # For objects, try to find ID column that matches the object class
+            class_name_lower = class_name.lower()
+            object_id_cols = [col for col in self.data_source.get_column_names()
+                            if col.lower() == class_name_lower + 'id']
+            if object_id_cols:
+                id_cols = [object_id_cols[0]]
+        else:
+            class_name = target_class.label or self.config.default_class_prefix
+
         class_name = class_name.lower().replace(" ", "_")
         
-        # Build template
-        template_parts = [f"{class_name}:{{{col}}}" for col in id_cols]
-        return template_parts[0] if len(template_parts) == 1 else "_".join(template_parts)
-    
+        # Build template with {base_iri} placeholder
+        id_part = "/".join([f"{{{col}}}" for col in id_cols])
+        return f"{{{{base_iri}}}}{class_name}/{id_part}"
+
     def _generate_column_mappings(self, target_class: OntologyClass) -> Dict[str, Any]:
         """Generate column to property mappings."""
         mappings = {}
@@ -246,8 +281,33 @@ class MappingGenerator:
         # Get datatype properties for this class
         properties = self.ontology.get_datatype_properties(target_class.uri)
         
-        # Match columns to properties
+        # First, identify which columns belong to linked objects
+        columns_in_objects = set()
+        fk_id_columns = set()  # Track FK ID columns separately
+        if self.config.auto_detect_relationships:
+            obj_properties = self.ontology.get_object_properties(target_class.uri)
+            for prop in obj_properties:
+                if not prop.range_type or prop.range_type not in self.ontology.classes:
+                    continue
+                range_class = self.ontology.classes[prop.range_type]
+                class_name = range_class.label.lower() if range_class.label else ""
+
+                # Find columns for this object
+                potential_cols = self._find_columns_for_object(range_class)
+                columns_in_objects.update(col_name for col_name, _ in potential_cols)
+
+                # Also track FK ID columns (e.g., BorrowerID, PropertyID)
+                for col_name in self.data_source.get_column_names():
+                    col_lower = col_name.lower()
+                    if col_lower.endswith('id') and col_lower == class_name + 'id':
+                        fk_id_columns.add(col_name)
+
+        # Match columns to properties (excluding those in linked objects and FK IDs)
         for col_name in self.data_source.get_column_names():
+            # Skip columns that belong to linked objects or are FK IDs
+            if col_name in columns_in_objects or col_name in fk_id_columns:
+                continue
+
             col_analysis = self.data_source.get_analysis(col_name)
 
             # Find matching property
@@ -278,7 +338,7 @@ class MappingGenerator:
                 
                 mappings[col_name] = mapping
             else:
-                # Track unmapped column
+                # Track unmapped column (only if not in objects)
                 self._unmapped_columns.append(col_name)
         
         return mappings
@@ -664,17 +724,30 @@ class MappingGenerator:
             if potential_cols:
                 obj_name = prop.label or str(prop.uri).split("#")[-1].split("/")[-1]
                 
+                # Build properties list with full metadata
+                properties = []
+                for col_name, matched_prop in potential_cols:
+                    col_analysis = self.data_source.get_analysis(col_name)
+                    prop_mapping = {
+                        "column": col_name,
+                        "as": self._format_uri(matched_prop.uri),  # Use matched_prop not prop!
+                    }
+
+                    # Add datatype if available
+                    if col_analysis.suggested_datatype:
+                        prop_mapping["datatype"] = col_analysis.suggested_datatype
+
+                    # Add required flag
+                    if col_analysis.is_required:
+                        prop_mapping["required"] = True
+
+                    properties.append(prop_mapping)
+
                 object_mappings[obj_name] = {
                     "predicate": self._format_uri(prop.uri),
                     "class": self._format_uri(range_class.uri),
-                    "iri_template": self._generate_iri_template(range_class),
-                    "properties": [
-                        {
-                            "column": col_name,
-                            "as": self._format_uri(prop.uri),
-                        }
-                        for col_name, prop in potential_cols
-                    ],
+                    "iri_template": self._generate_iri_template(range_class, for_object=True, object_class=range_class),
+                    "properties": properties,
                 }
         
         return object_mappings
@@ -682,16 +755,37 @@ class MappingGenerator:
     def _find_columns_for_object(
         self, range_class: OntologyClass
     ) -> List[tuple[str, OntologyProperty]]:
-        """Find columns that could belong to a linked object class."""
+        """Find columns that could belong to a linked object class.
+
+        Only includes columns where the column NAME contains the class name.
+        E.g., BorrowerID, BorrowerName for Borrower class
+              PropertyID, PropertyAddress for Property class
+
+        Skips pure ID columns (e.g., BorrowerID, PropertyID) as these are foreign keys.
+        """
         potential = []
         range_props = self.ontology.get_datatype_properties(range_class.uri)
-        
+        class_name = range_class.label.lower() if range_class.label else ""
+
         for col_name in self.data_source.get_column_names():
             col_analysis = self.data_source.get_analysis(col_name)
+            col_lower = col_name.lower()
+
+            # Check if column name contains the class name
+            # E.g., "borrowerid" contains "borrower", "propertyaddress" contains "property"
+            if class_name not in col_lower:
+                continue
+
+            # Skip pure ID columns (they're foreign keys, not properties to map)
+            # E.g., BorrowerID, PropertyID
+            if col_lower.endswith('id') and col_lower == class_name + 'id':
+                continue
+
+            # Try to match to object's properties
             match_result = self._match_column_to_property(col_name, col_analysis, range_props)
             
             if match_result:
-                matched_prop, _, _ = match_result  # Unpack tuple
+                matched_prop, _, _ = match_result
                 potential.append((col_name, matched_prop))
         
         return potential
@@ -710,30 +804,14 @@ class MappingGenerator:
         return uri_str
     
     def save_yaml(self, output_file: str):
-        """Save the mapping to a YAML file."""
+        """Save the mapping to a YAML file with clean formatting."""
         if not self.mapping:
             raise ValueError("No mapping generated. Call generate() first.")
         
-        # Regenerate with correct output path if different
-        if not hasattr(self, 'output_path') or self.output_path != Path(output_file):
-            # Regenerate to get correct relative paths
-            target_class = None
-            for sheet in self.mapping.get('sheets', []):
-                class_uri = sheet['row_resource']['class']
-                # Find the class
-                for cls in self.ontology.classes.values():
-                    if self._format_uri(cls.uri) == class_uri:
-                        target_class = cls
-                        break
-                if target_class:
-                    break
-            
-            if target_class:
-                self.generate(target_class=target_class.label, output_path=output_file)
-        
-        with open(output_file, 'w') as f:
-            yaml.dump(self.mapping, f, default_flow_style=False, sort_keys=False)
-    
+        # Use custom formatter for clean output
+        from .yaml_formatter import save_formatted_mapping
+        save_formatted_mapping(self.mapping, output_file, wizard_config=None)
+
     def save_json(self, output_file: str):
         """Save the mapping to a JSON file."""
         if not self.mapping:
@@ -955,10 +1033,26 @@ class MappingGenerator:
         with open(output_file, 'w') as f:
             json.dump(self.alignment_report.to_dict(), f, indent=2)
 
-    def print_alignment_summary(self):
-        """Print a human-readable alignment summary to console."""
+    def export_alignment_html(self, output_file: str):
+        """Export alignment report to HTML file.
+
+        Args:
+            output_file: Path to save the HTML report
+        """
         if not self.alignment_report:
             raise ValueError("No alignment report available. Call generate_with_alignment_report() first.")
 
-        print(self.alignment_report.summary_message())
+        self.alignment_report.export_html(output_file)
+
+    def print_alignment_summary(self, show_details: bool = True):
+        """Print a human-readable alignment summary to console.
+
+        Args:
+            show_details: Whether to show detailed match tables (default: True)
+        """
+        if not self.alignment_report:
+            raise ValueError("No alignment report available. Call generate_with_alignment_report() first.")
+
+        # Use Rich terminal output if available, otherwise fall back to simple text
+        self.alignment_report.print_rich_terminal(show_details=show_details)
 
