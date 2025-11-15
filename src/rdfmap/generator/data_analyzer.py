@@ -158,9 +158,10 @@ class DataSourceAnalyzer:
 
             # Read Excel file using Polars - use first sheet for now
             try:
-                df = pl.read_excel(self.file_path, sheet_name=0)
+                # Use sheet_id instead of sheet_name for compatibility
+                df = pl.read_excel(self.file_path, sheet_id=1)
                 df = df.head(100)  # Sample first 100 rows
-            except (ImportError, AttributeError):
+            except (ImportError, AttributeError, ValueError) as e:
                 # Fallback to openpyxl for Excel reading
                 from openpyxl import load_workbook
                 wb = load_workbook(self.file_path, read_only=True)
@@ -171,9 +172,11 @@ class DataSourceAnalyzer:
                 for row in ws.iter_rows(values_only=True, max_row=101):  # Header + 100 rows
                     data.append(list(row))
 
+                wb.close()
+
                 if data:
                     columns = [str(col) if col is not None else f"Column_{i}" for i, col in enumerate(data[0])]
-                    df = pl.DataFrame(data[1:], schema=columns)
+                    df = pl.DataFrame(data[1:], schema=columns, strict=False)
                 else:
                     return
 

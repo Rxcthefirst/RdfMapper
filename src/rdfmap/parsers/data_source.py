@@ -317,61 +317,144 @@ class JSONParser(DataSourceParser):
         Returns:
             List of flattened dictionaries
         """
-        if isinstance(data, dict):
+        if isinstance(data, list):
+            # Handle top-level arrays
+            if not data:
+                return []
+
+            # Check if it's an array of simple objects (no nesting)
+            # If all items are dicts with same keys, treat as tabular data
+            if all(isinstance(item, dict) for item in data):
+                # Check if this is a simple flat structure
+                sample_keys = set()
+                for item in data[:5]:  # Sample first 5 items
+                    sample_keys.update(item.keys())
+
+                # Check if any values are complex (nested)
+                has_nested = False
+                for item in data[:5]:
+                    for value in item.values():
+                        if isinstance(value, (dict, list)):
+                            has_nested = True
+                            break
+                    if has_nested:
+                        break
+
+                if not has_nested:
+                    # Simple flat array of objects - return as-is
+                    result = []
+                    for item in data:
+                        flattened = {}
+                        for key, value in item.items():
+                            new_key = f"{prefix}.{key}" if prefix else key
+                            flattened[new_key] = value
+                        result.append(flattened)
+                    return result
+                else:
+                    # Has nested structures - need to expand
+                    result = []
+                    for item in data:
+                        sub_rows = self._flatten_json_data(item, prefix)
+                        result.extend(sub_rows)
+                    return result
+            else:
+                # Mixed types or simple values - use array indexing
+                result = []
+                for i, item in enumerate(data):
+                    if isinstance(item, (dict, list)):
+                        sub_rows = self._flatten_json_data(item, f"{prefix}[{i}]")
+                        result.extend(sub_rows)
+                    else:
+                        result.append({f"{prefix}[{i}]": item})
+                return result
+
+        elif isinstance(data, dict):
             # Handle dictionary - flatten keys
             result = []
             flattened = {}
+            arrays_to_expand = {}
 
             for key, value in data.items():
                 new_key = f"{prefix}.{key}" if prefix else key
 
                 if isinstance(value, list):
-                    # Handle arrays - expand into multiple rows
+                    # Handle arrays
                     if not value:  # Empty array
                         flattened[new_key] = None
+                    elif all(isinstance(item, dict) for item in value):
+                        # Array of objects - expand into multiple rows
+                        arrays_to_expand[new_key] = value
+                    elif all(not isinstance(item, (dict, list)) for item in value):
+                        # Array of simple values - could convert to string or expand
+                        # For now, store as None and expand below
+                        arrays_to_expand[new_key] = value
                     else:
-                        # Create a row for each array element
+                        # Mixed array - expand with indexing
                         for i, item in enumerate(value):
                             if isinstance(item, (dict, list)):
-                                # Recursively flatten complex array elements
                                 sub_rows = self._flatten_json_data(item, f"{new_key}[{i}]")
                                 result.extend(sub_rows)
                             else:
-                                # Simple array element
-                                row = flattened.copy()
-                                row[f"{new_key}[{i}]"] = item
-                                result.append(row)
+                                flattened[f"{new_key}[{i}]"] = item
                 elif isinstance(value, dict):
                     # Recursively flatten nested dictionaries
-                    nested = self._flatten_json_data(value, new_key)
-                    if nested:
-                        result.extend(nested)
+                    nested_flat = self._flatten_dict(value, new_key)
+                    flattened.update(nested_flat)
                 else:
                     # Simple value
                     flattened[new_key] = value
 
-            if flattened and not result:
-                result.append(flattened)
-            elif flattened and result:
-                # Merge flattened data with existing rows
-                for row in result:
-                    row.update(flattened)
+            # Handle array expansion
+            if arrays_to_expand:
+                for array_key, array_values in arrays_to_expand.items():
+                    for item in array_values:
+                        row = flattened.copy()
+                        if isinstance(item, dict):
+                            # Flatten the dict and merge
+                            item_flat = self._flatten_dict(item, array_key)
+                            row.update(item_flat)
+                        else:
+                            # Simple value
+                            row[array_key] = item
+                        result.append(row)
 
-            return result if result else [flattened] if flattened else []
+            if result:
+                return result
+            else:
+                return [flattened] if flattened else []
 
-        elif isinstance(data, list):
-            # Handle top-level arrays
-            result = []
-            for i, item in enumerate(data):
-                if isinstance(item, (dict, list)):
-                    sub_rows = self._flatten_json_data(item, f"[{i}]")
-                    result.extend(sub_rows)
-                else:
-                    result.append({f"[{i}]": item})
-            return result
         else:
             # Simple value at root
             return [{"value": data}]
+
+    def _flatten_dict(self, data: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
+        """Flatten a dictionary without array expansion.
+
+        Args:
+            data: Dictionary to flatten
+            prefix: Prefix for keys
+
+        Returns:
+            Flattened dictionary
+        """
+        result = {}
+        for key, value in data.items():
+            new_key = f"{prefix}.{key}" if prefix else key
+
+            if isinstance(value, dict):
+                # Recursively flatten nested dict
+                nested = self._flatten_dict(value, new_key)
+                result.update(nested)
+            elif isinstance(value, list):
+                # For lists in dict flattening, just store None or join strings
+                if value and all(isinstance(item, str) for item in value):
+                    result[new_key] = ", ".join(value)
+                else:
+                    result[new_key] = None  # Will be expanded in main logic
+            else:
+                result[new_key] = value
+
+        return result
 
     def get_column_names(self) -> List[str]:
         """Get list of column names from JSON."""

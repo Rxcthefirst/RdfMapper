@@ -536,20 +536,21 @@ class ConfigurationWizard:
         target_class = self.config.get('target_class')
         mapping = generator.generate(target_class=target_class, output_path=output_path)
 
-        # Display alignment report
-        console.print()
-        generator.print_alignment_summary(show_details=True)
+        # Display alignment report if available
+        if hasattr(generator, 'alignment_report') and generator.alignment_report:
+            console.print()
+            generator.print_alignment_summary(show_details=True)
 
-        # Save alignment reports
-        try:
-            from pathlib import Path
-            output_dir = Path(output_path).parent
-            json_report, html_report = generator.save_alignment_report(str(output_dir))
-            console.print(f"\n[dim]Alignment reports saved to:[/dim]")
-            console.print(f"[dim]  • {json_report}[/dim]")
-            console.print(f"[dim]  • {html_report}[/dim]\n")
-        except Exception:
-            pass
+            # Save alignment reports
+            try:
+                from pathlib import Path
+                output_dir = Path(output_path).parent
+                json_report, html_report = generator.save_alignment_report(str(output_dir))
+                console.print(f"\n[dim]Alignment reports saved to:[/dim]")
+                console.print(f"[dim]  • {json_report}[/dim]")
+                console.print(f"[dim]  • {html_report}[/dim]\n")
+            except Exception:
+                pass
 
         # Merge wizard-specific settings
         mapping = self._merge_wizard_settings(mapping)
@@ -570,6 +571,12 @@ class ConfigurationWizard:
         ontology_ns = {k: v for k, v in mapping.get('namespaces', {}).items()
                       if k in essential_ns or 'example.com' in v or 'mortgage' in v}
         mapping['namespaces'] = ontology_ns
+
+        # Ensure sheet source uses full path from wizard config
+        if mapping.get('sheets') and self.config.get('data_source'):
+            for sheet in mapping['sheets']:
+                # Override with full path from wizard
+                sheet['source'] = self.config['data_source']
 
         # Add validation if configured
         if self.config.get('validate'):
@@ -621,17 +628,54 @@ class ConfigurationWizard:
             mapping: Complete mapping configuration
             path: Path to save the file
         """
-        from ..generator.yaml_formatter import save_formatted_mapping
+        try:
+            from ..generator.yaml_formatter import save_formatted_mapping
 
-        # Prepare wizard config for header
-        wizard_config = {
-            'data_source': self.config.get('data_source'),
-            'ontology': self.config.get('ontology'),
-            'target_class': self.config.get('target_class'),
-        }
+            # Prepare wizard config for header
+            wizard_config = {
+                'data_source': self.config.get('data_source'),
+                'ontology': self.config.get('ontology'),
+                'target_class': self.config.get('target_class'),
+            }
 
-        # Use custom formatter
-        save_formatted_mapping(mapping, path, wizard_config)
+            # Use custom formatter
+            save_formatted_mapping(mapping, path, wizard_config)
+        except ImportError:
+            # Fallback to simple YAML dump if formatter not available
+            with open(path, 'w') as f:
+                yaml.dump(mapping, f, default_flow_style=False, sort_keys=False)
+
+    def _save_config(self, path: str):
+        """Save configuration to YAML file.
+
+        Args:
+            path: Path to save the configuration file
+        """
+        # Build proper mapping config structure
+        mapping_config = self._build_mapping_config()
+
+        # Save as YAML
+        with open(path, 'w') as f:
+            yaml.dump(mapping_config, f, default_flow_style=False, sort_keys=False)
+
+    def _extract_base_iri(self) -> str:
+        """Extract base IRI from target class or use default.
+
+        Returns:
+            Base IRI string
+        """
+        target_class = self.config.get('target_class', '')
+
+        if target_class:
+            # Extract base IRI from target class URI
+            # e.g., "http://example.com/ontology#Person" -> "http://example.com/ontology#"
+            if '#' in target_class:
+                return target_class.rsplit('#', 1)[0] + '#'
+            elif '/' in target_class:
+                return target_class.rsplit('/', 1)[0] + '/'
+
+        # Use default
+        return 'http://example.org/data/'
 
 
 def run_wizard(output_path: Optional[str] = None, template_name: Optional[str] = None) -> Dict[str, Any]:

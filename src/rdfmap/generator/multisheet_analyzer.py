@@ -4,7 +4,7 @@ Detects and analyzes relationships between sheets in Excel workbooks,
 enabling automatic generation of cross-sheet mappings and joins.
 """
 
-from typing import Dict, List, Optional, Tuple, Set, Any
+from typing import Dict, List, Optional, Any
 from pathlib import Path
 import polars as pl
 from dataclasses import dataclass, field
@@ -16,7 +16,7 @@ class SheetInfo:
     name: str
     row_count: int
     column_names: List[str]
-    identifier_columns: List[str]  # Columns that look like IDs
+    identifier_columns: List[str] = field(default_factory=list)  # Columns that look like IDs
     foreign_key_candidates: Dict[str, str] = field(default_factory=dict)  # col -> referenced_sheet
     sample_data: Optional[pl.DataFrame] = None
 
@@ -83,7 +83,7 @@ class MultiSheetAnalyzer:
                         valid_rows = [row for row in rows if any(cell is not None for cell in row)]
 
                         if valid_rows:
-                            df = pl.DataFrame(valid_rows, schema=columns, strict=False)
+                            df = pl.DataFrame(valid_rows, schema=columns, orient="row")
                             sheet_info = self._analyze_sheet(sheet_name, df, len(self.sheets))
                             self.sheets[sheet_name] = sheet_info
                     except Exception as e:
@@ -130,8 +130,16 @@ class MultiSheetAnalyzer:
             # Look for patterns like "CustomerID", "OrderID", etc.
             if col_lower.endswith('id') and col not in identifier_cols:
                 # Extract the referenced entity name
-                # E.g., "CustomerID" -> "Customer"
-                entity_name = col[:-2]  # Remove "ID"
+                # E.g., "CustomerID" -> "Customer", "customer_id" -> "customer"
+                if col.endswith('ID'):
+                    # CamelCase: CustomerID -> Customer
+                    entity_name = col[:-2]
+                elif col_lower.endswith('_id'):
+                    # snake_case: customer_id -> customer
+                    entity_name = col[:-3]
+                else:
+                    # lowercase: customerid -> customer
+                    entity_name = col[:-2]
                 fk_candidates[col] = entity_name
 
         return SheetInfo(
@@ -193,16 +201,24 @@ class MultiSheetAnalyzer:
             if sheet_name.lower() == entity_lower:
                 return sheet_name
 
-        # Try plural form
+        # Try plural forms
         plural_forms = [
-            entity_lower + 's',
-            entity_lower + 'es',
-            entity_lower  # Original
+            entity_lower + 's',      # customer -> customers
+            entity_lower + 'es',     # address -> addresses
+            entity_lower + 'ies',    # category -> categories (handled separately)
         ]
+
+        # Handle special pluralization (e.g., "y" -> "ies")
+        if entity_lower.endswith('y') and len(entity_lower) > 1:
+            plural_forms.append(entity_lower[:-1] + 'ies')
 
         for sheet_name in self.sheets.keys():
             sheet_lower = sheet_name.lower()
-            if sheet_lower in plural_forms or any(form in sheet_lower for form in plural_forms):
+            # Check if sheet name matches any plural form
+            if sheet_lower in plural_forms:
+                return sheet_name
+            # Check if any plural form is contained in sheet name
+            if any(form in sheet_lower for form in plural_forms):
                 return sheet_name
 
         # Try if entity name is contained in sheet name
@@ -266,9 +282,12 @@ class MultiSheetAnalyzer:
             return None
 
         try:
-            # Get sample values
-            source_values = source_info.sample_data[source_col].drop_nulls()
-            target_values = target_info.sample_data[target_col].drop_nulls()
+            # Get sample values  (we know sample_data is not None from check above)
+            source_df = source_info.sample_data
+            target_df = target_info.sample_data
+
+            source_values = source_df[source_col].drop_nulls()
+            target_values = target_df[target_col].drop_nulls()
 
             if len(source_values) == 0 or len(target_values) == 0:
                 return None
@@ -280,13 +299,13 @@ class MultiSheetAnalyzer:
             overlap = len(source_set & target_set)
             overlap_ratio = overlap / len(source_set) if source_set else 0
 
-            if overlap_ratio < 0.5:  # Less than 50% overlap, probably not a valid FK
+            if overlap_ratio < 0.3:  # Less than 30% overlap, probably not a valid FK
                 return None
 
             # Determine relationship type
             # Check cardinality
-            source_unique_ratio = len(source_set) / len(source_values) if source_values else 0
-            target_unique_ratio = len(target_set) / len(target_values) if target_values else 0
+            source_unique_ratio = len(source_set) / len(source_values) if len(source_values) > 0 else 0
+            target_unique_ratio = len(target_set) / len(target_values) if len(target_values) > 0 else 0
 
             if source_unique_ratio > 0.9 and target_unique_ratio > 0.9:
                 rel_type = "one-to-one"
@@ -316,6 +335,9 @@ class MultiSheetAnalyzer:
 
         except Exception as e:
             # If analysis fails, return None
+            # Log the error for debugging
+            import warnings
+            warnings.warn(f"Failed to analyze relationship {source_sheet}.{source_col} -> {target_sheet}.{target_col}: {e}")
             return None
 
     def get_sheet_names(self) -> List[str]:

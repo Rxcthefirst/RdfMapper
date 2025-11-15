@@ -314,12 +314,12 @@ class TestWizardIntegration:
         assert len(config['sheets']) == 1
         sheet = config['sheets'][0]
         assert sheet['source'] == str(sample_csv)
-        assert sheet['row_resource']['class'] == "http://example.com/Person"
+        assert sheet['row_resource']['class'] == "ex:Person"
 
         # Verify wizard metadata
-        assert '_wizard_config' in config
-        assert config['_wizard_config']['priority'] == 'balanced'
-        assert config['_wizard_config']['output_format'] == 'turtle'
+        assert '_wizard_metadata' in config
+        assert config['_wizard_metadata']['priority'] == 'balanced'
+        assert config['_wizard_metadata']['output_format'] == 'turtle'
 
         # Verify file was saved
         assert output_path.exists()
