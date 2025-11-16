@@ -7,6 +7,7 @@ import polars as pl
 from rdflib import Graph, Literal, Namespace, RDF, URIRef
 from rdflib.namespace import OWL
 
+from ..generator.ontology_analyzer import OntologyAnalyzer  # removed OntologyProperty
 from ..iri.generator import IRITemplate, curie_to_iri
 from ..models.errors import ErrorSeverity, ProcessingReport
 from ..models.mapping import MappingConfig, SheetMapping
@@ -17,7 +18,7 @@ from ..validator.datatypes import validate_datatype
 class RDFGraphBuilder:
     """Build RDF graphs from Polars DataFrames with high performance."""
 
-    def __init__(self, config: MappingConfig, report: ProcessingReport, streaming_writer=None):
+    def __init__(self, config: MappingConfig, report: ProcessingReport, streaming_writer=None, ontology_analyzer: Optional[OntologyAnalyzer]=None):
         """Initialize graph builder.
 
         Args:
@@ -28,6 +29,7 @@ class RDFGraphBuilder:
         self.config = config
         self.report = report
         self.streaming_writer = streaming_writer
+        self.ontology_analyzer = ontology_analyzer
 
         # Only create in-memory graph if not streaming
         if streaming_writer is None:
@@ -40,6 +42,45 @@ class RDFGraphBuilder:
 
         # Track generated IRIs to detect duplicates (only when aggregating)
         self.iri_registry: Dict[str, List[int]] = {}  # iri -> [row_numbers]
+
+        # Build quick property index for structural validation
+        self._prop_index = {}
+        if ontology_analyzer:
+            for prop in ontology_analyzer.properties.values():
+                self._prop_index[str(prop.uri)] = prop
+
+        self.enable_reasoning = getattr(config.defaults, 'enable_reasoning', True)
+        self.transitive_depth = getattr(config.defaults, 'transitive_depth', 2)
+
+    def _structural_check(self, subject: URIRef, predicate: URIRef, obj) -> None:
+        if not self.ontology_analyzer:
+            return
+        prop = self._prop_index.get(str(predicate))
+        if not prop:
+            return
+        # Domain check: subject must have rdf:type of domain if domain declared
+        if prop.domain and self.graph:
+            has_domain_type = (subject, RDF.type, prop.domain) in self.graph
+            if not has_domain_type:
+                self.report.add_structural_violation(
+                    f"Domain violation: {subject} missing type {prop.domain} for property {predicate}", is_domain=True
+                )
+        # Range check
+        if prop.range_type and self.graph:
+            from rdflib.namespace import XSD
+            if isinstance(obj, Literal):
+                # If range is a datatype
+                if str(prop.range_type).startswith(str(XSD)) and obj.datatype != prop.range_type:
+                    self.report.add_structural_violation(
+                        f"Range datatype violation: {predicate} expected {prop.range_type} got {obj.datatype} on {subject}", is_domain=False
+                    )
+            else:
+                # Object: must have rdf:type of range class
+                has_range_type = (obj, RDF.type, prop.range_type) in self.graph
+                if not has_range_type:
+                    self.report.add_structural_violation(
+                        f"Range class violation: object {obj} missing type {prop.range_type} for {predicate}", is_domain=False
+                    )
 
     def _add_triple(self, subject: URIRef, predicate: URIRef, obj) -> None:
         """Add a triple to the output (streaming or aggregated).
@@ -55,6 +96,8 @@ class RDFGraphBuilder:
         elif self.graph is not None:
             # Add to in-memory graph
             self.graph.add((subject, predicate, obj))
+            # Structural validation inline (only when aggregating)
+            self._structural_check(subject, predicate, obj)
         else:
             raise RuntimeError("Builder not properly configured")
 
@@ -356,6 +399,8 @@ class RDFGraphBuilder:
                 if literal is not None:
                     property_uri = self._resolve_property(column_mapping.as_property)
                     self._add_triple(resource_iri, property_uri, literal)
+        # Apply reasoning to main resource
+        self._apply_reasoning(resource_iri)
 
         return resource_iri
 
@@ -375,16 +420,6 @@ class RDFGraphBuilder:
             row_num: Row number for error reporting
         """
         for obj_name, obj_mapping in sheet.objects.items():
-            # Check condition if specified
-            if hasattr(obj_mapping, 'condition') and obj_mapping.condition:
-                try:
-                    # Simple condition evaluation (could be enhanced)
-                    if not eval(obj_mapping.condition, {"__builtins__": {}}, row_data):
-                        continue
-                except Exception:
-                    # Skip on condition evaluation error
-                    continue
-
             # Generate object IRI
             object_iri = self._generate_iri(
                 obj_mapping.iri_template,
@@ -439,6 +474,8 @@ class RDFGraphBuilder:
             if obj_mapping.predicate:
                 link_uri = self._resolve_property(obj_mapping.predicate)
                 self._add_triple(main_resource, link_uri, object_iri)
+            # Reason over object
+            self._apply_reasoning(object_iri)
 
     def get_graph(self) -> Optional[Graph]:
         """Get the RDF graph.
@@ -469,6 +506,66 @@ class RDFGraphBuilder:
         """
         return {iri: rows for iri, rows in self.iri_registry.items() if len(rows) > 1}
 
+    # Reasoning expansions (optional lightweight)
+    def _apply_reasoning(self, resource: URIRef):
+        if not self.enable_reasoning:
+            return
+        if not self.ontology_analyzer or not self.graph:
+            return
+        # Subclass inference: if resource has type T, add superclasses
+        types = {o for s,p,o in self.graph.triples((resource, RDF.type, None))}
+        for t in list(types):
+            for sup in self.ontology_analyzer.get_superclasses(t):
+                if (resource, RDF.type, sup) not in self.graph:
+                    self.graph.add((resource, RDF.type, sup))
+                    self.report.inferred_types += 1
+        # Inverse / symmetric / transitive property expansions
+        for p in list(self._prop_index.values()):
+            if p.inverse_of:
+                # For each triple resource p o, assert o inverse_of resource
+                for _,_,o in self.graph.triples((resource, p.uri, None)):
+                    if (o, p.inverse_of, resource) not in self.graph:
+                        self.graph.add((o, p.inverse_of, resource))
+                        self.report.inverse_links_added += 1
+            if p.is_symmetric:
+                for _,_,o in self.graph.triples((resource, p.uri, None)):
+                    if (o, p.uri, resource) not in self.graph:
+                        self.graph.add((o, p.uri, resource))
+                        self.report.symmetric_links_added += 1
+            if p.is_transitive and self.transitive_depth > 1:
+                frontier = {resource}
+                visited = set()
+                depth = 0
+                while depth < self.transitive_depth:
+                    new_frontier = set()
+                    for node in frontier:
+                        for _,_,nxt in self.graph.triples((node, p.uri, None)):
+                            if (resource, p.uri, nxt) not in self.graph:
+                                self.graph.add((resource, p.uri, nxt))
+                                self.report.transitive_links_added += 1
+                            if nxt not in visited:
+                                new_frontier.add(nxt)
+                        visited.add(node)
+                    frontier = new_frontier
+                    depth += 1
+        # Cardinality checks (basic): count occurrences per functional/inverse functional property
+        for p in list(self._prop_index.values()):
+            if p.is_functional:
+                objs = {o for _,_,o in self.graph.triples((resource, p.uri, None))}
+                if len(objs) > 1:
+                    self.report.add_cardinality_violation(f"Functional property {p.uri} has {len(objs)} values for {resource}")
+        # Cardinality restrictions
+        for prop_uri, restrictions in getattr(self.ontology_analyzer, 'property_restrictions', {}).items():
+            for r in restrictions:
+                if r.get('class') in [str(t) for t in types]:
+                    count = len({o for _,_,o in self.graph.triples((resource, URIRef(prop_uri), None))})
+                    if r.get('cardinality') is not None and count != r['cardinality']:
+                        self.report.add_cardinality_restriction_violation(f"Exact cardinality violation {prop_uri} expected {r['cardinality']} got {count}", 'exact')
+                    if r.get('minCardinality') is not None and count < r['minCardinality']:
+                        self.report.add_cardinality_restriction_violation(f"Min cardinality violation {prop_uri} expected >= {r['minCardinality']} got {count}", 'min')
+                    if r.get('maxCardinality') is not None and count > r['maxCardinality']:
+                        self.report.add_cardinality_restriction_violation(f"Max cardinality violation {prop_uri} expected <= {r['maxCardinality']} got {count}", 'max')
+
 
 def serialize_graph(graph: Graph, format: str, output_path: Path) -> None:
     """Serialize RDF graph to file.
@@ -488,6 +585,7 @@ def serialize_graph(graph: Graph, format: str, output_path: Path) -> None:
         "json-ld": "json-ld",
         "nt": "nt",
         "ntriples": "nt",
+        "n3": "n3",
     }
 
     rdf_format = format_map.get(format.lower(), "turtle")

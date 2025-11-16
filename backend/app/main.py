@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from .config import settings
-from .routers import projects, mappings, conversion, websockets
+from .routers import projects, mappings, conversion, websockets, files
 
 # Import RDFMap version
 try:
@@ -37,6 +37,7 @@ app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(mappings.router, prefix="/api/mappings", tags=["mappings"])
 app.include_router(conversion.router, prefix="/api/conversion", tags=["conversion"])
 app.include_router(websockets.router, prefix="/ws", tags=["websockets"])
+app.include_router(files.router, prefix="/api/files", tags=["files"])
 
 # Serve uploaded files (in production, use S3 or CDN)
 if os.path.exists("/app/uploads"):
@@ -70,14 +71,15 @@ async def startup_event():
     os.makedirs("/app/uploads", exist_ok=True)
     os.makedirs("/app/data", exist_ok=True)
 
-    # TODO: Initialize database
-    # TODO: Load BERT model into memory (if using semantic matching)
+    # Initialize database tables
+    from .database import init_db
+    init_db()
 
     print(f"🚀 RDFMap Web API started (RDFMap Core v{rdfmap_version})")
+    print(f"📊 Database initialized and ready")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
     print("👋 RDFMap Web API shutting down")
-

@@ -11,6 +11,7 @@ async function handle<T>(promise: Promise<Response>): Promise<T> {
 
 export const api = {
   listProjects: () => handle<any[]>(fetch('/api/projects/')),
+  getProject: (projectId: string) => handle<any>(fetch(`/api/projects/${projectId}`)),
   createProject: (data: { name: string; description?: string }) =>
     handle<any>(fetch('/api/projects/', {
       method: 'POST',
@@ -51,4 +52,31 @@ export const api = {
   jobStatus: (taskId: string) => handle<any>(fetch(`/api/conversion/job/${taskId}`)),
   downloadRdf: (projectId: string) => fetch(`/api/conversion/${projectId}/download`),
   fetchMappingYaml: (projectId: string) => fetch(`/api/mappings/${projectId}?raw=true`).then(r => r.text()),
+  uploadShapes: (projectId: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return handle<any>(fetch(`/api/projects/${projectId}/upload-shapes`, { method: 'POST', body: fd }))
+  },
+  uploadSkos: (projectId: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return handle<any>(fetch(`/api/projects/${projectId}/upload-skos`, { method: 'POST', body: fd }))
+  },
+  updateSettings: async (projectId: string, settings: any) => {
+    const res = await fetch(`/api/projects/${projectId}/settings`, { method: 'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(settings) })
+    if(!res.ok) throw new Error(await res.text())
+    return res.json()
+  },
+  removeSkos: async (projectId: string, file: string) => {
+    const url = new URL(`/api/projects/${projectId}/skos`, window.location.origin)
+    url.searchParams.set('file', file)
+    const res = await fetch(url.toString(), { method: 'DELETE' })
+    if(!res.ok) throw new Error(await res.text())
+    return res.json()
+  },
+  removeShapes: async (projectId: string) => {
+    const res = await fetch(`/api/projects/${projectId}/shapes`, { method: 'DELETE' })
+    if(!res.ok) throw new Error(await res.text())
+    return res.json()
+  }
 }

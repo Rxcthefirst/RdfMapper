@@ -62,7 +62,12 @@ class OntologyProperty:
         related: Optional[List[str]] = None,
         exact_matches: Optional[List[str]] = None,
         close_matches: Optional[List[str]] = None,
-        definition: Optional[str] = None
+        definition: Optional[str] = None,
+        is_functional: bool = False,
+        is_inverse_functional: bool = False,
+        is_symmetric: bool = False,
+        is_transitive: bool = False,
+        inverse_of: Optional[URIRef] = None,
     ):
         self.uri = uri
         self.label = label
@@ -79,6 +84,11 @@ class OntologyProperty:
         self.exact_matches = exact_matches or []
         self.close_matches = close_matches or []
         self.definition = definition
+        self.is_functional = is_functional
+        self.is_inverse_functional = is_inverse_functional
+        self.is_symmetric = is_symmetric
+        self.is_transitive = is_transitive
+        self.inverse_of = inverse_of
 
     def get_all_labels(self) -> List[str]:
         """Get all labels (preferred, rdfs, alternative, hidden) for matching."""
@@ -94,7 +104,7 @@ class OntologyProperty:
         return labels
     
     def __repr__(self):
-        return f"OntologyProperty({self.uri}, domain={self.domain}, range={self.range_type})"
+        return f"OntologyProperty({self.uri}, domain={self.domain}, range={self.range_type}, functional={self.is_functional}, inverse_functional={self.is_inverse_functional}, inverse_of={self.inverse_of})"
 
 
 class OntologyAnalyzer:
@@ -135,10 +145,12 @@ class OntologyAnalyzer:
         self._extract_properties()
         self._link_properties_to_classes()
         self._extract_owl_restrictions()
+        self._build_class_hierarchy()
 
     def _extract_classes(self):
         """Extract all OWL/RDFS classes from the ontology."""
-        for cls_uri in self.graph.subjects(RDF.type, OWL.Class):
+        for cls_uri_node in self.graph.subjects(RDF.type, OWL.Class):
+            cls_uri = URIRef(str(cls_uri_node))
             label = self._get_label(cls_uri)
             comment = self._get_comment(cls_uri)
             pref_label = self._get_pref_label(cls_uri)
@@ -147,9 +159,9 @@ class OntologyAnalyzer:
             self.classes[cls_uri] = OntologyClass(
                 cls_uri, label, comment, pref_label, alt_labels, hidden_labels
             )
-        
         # Also check for RDFS classes
-        for cls_uri in self.graph.subjects(RDF.type, RDFS.Class):
+        for cls_uri_node in self.graph.subjects(RDF.type, RDFS.Class):
+            cls_uri = URIRef(str(cls_uri_node))
             if cls_uri not in self.classes:
                 label = self._get_label(cls_uri)
                 comment = self._get_comment(cls_uri)
@@ -159,19 +171,20 @@ class OntologyAnalyzer:
                 self.classes[cls_uri] = OntologyClass(
                     cls_uri, label, comment, pref_label, alt_labels, hidden_labels
                 )
-    
+
     def _extract_properties(self):
         """Extract all properties (data and object) from the ontology."""
         # Object properties
-        for prop_uri in self.graph.subjects(RDF.type, OWL.ObjectProperty):
+        for prop_uri_node in self.graph.subjects(RDF.type, OWL.ObjectProperty):
+            prop_uri = URIRef(str(prop_uri_node))
             self._extract_property(prop_uri, is_object_property=True)
-        
         # Data properties
-        for prop_uri in self.graph.subjects(RDF.type, OWL.DatatypeProperty):
+        for prop_uri_node in self.graph.subjects(RDF.type, OWL.DatatypeProperty):
+            prop_uri = URIRef(str(prop_uri_node))
             self._extract_property(prop_uri, is_object_property=False)
-        
         # RDF properties
-        for prop_uri in self.graph.subjects(RDF.type, RDF.Property):
+        for prop_uri_node in self.graph.subjects(RDF.type, RDF.Property):
+            prop_uri = URIRef(str(prop_uri_node))
             if prop_uri not in self.properties:
                 self._extract_property(prop_uri, is_object_property=False)
     
@@ -203,6 +216,15 @@ class OntologyAnalyzer:
         definition_vals = [str(d) for d in self.graph.objects(prop_uri, SKOS.definition)]
         definition = definition_vals[0] if definition_vals else None
 
+        is_functional = (prop_uri, RDF.type, OWL.FunctionalProperty) in self.graph
+        is_inverse_functional = (prop_uri, RDF.type, OWL.InverseFunctionalProperty) in self.graph
+        is_symmetric = (prop_uri, RDF.type, OWL.SymmetricProperty) in self.graph
+        is_transitive = (prop_uri, RDF.type, OWL.TransitiveProperty) in self.graph
+        inverse_of = None
+        for inv in self.graph.objects(prop_uri, OWL.inverseOf):
+            inverse_of = inv
+            break
+
         self.properties[prop_uri] = OntologyProperty(
             prop_uri,
             label,
@@ -219,6 +241,11 @@ class OntologyAnalyzer:
             exact_matches,
             close_matches,
             definition,
+            is_functional=is_functional,
+            is_inverse_functional=is_inverse_functional,
+            is_symmetric=is_symmetric,
+            is_transitive=is_transitive,
+            inverse_of=inverse_of,
         )
     
     def _link_properties_to_classes(self):
@@ -355,3 +382,27 @@ class OntologyAnalyzer:
                             'minCardinality': min_card,
                             'maxCardinality': max_card
                         })
+
+    # Precompute subclass closure for reasoning
+    def _build_class_hierarchy(self):
+        self.subclass_map: Dict[URIRef, List[URIRef]] = {}
+        for cls in self.classes.keys():
+            supers = set()
+            for sup in self.graph.objects(cls, RDFS.subClassOf):
+                supers.add(sup)
+            self.subclass_map[cls] = list(supers)
+        # Build transitive closure (simple upward expansion)
+        changed = True
+        while changed:
+            changed = False
+            for cls, supers in list(self.subclass_map.items()):
+                expanded = set(supers)
+                for sup in list(supers):
+                    for sup2 in self.subclass_map.get(sup, []):
+                        if sup2 not in expanded:
+                            expanded.add(sup2)
+                            changed = True
+                self.subclass_map[cls] = list(expanded)
+
+    def get_superclasses(self, cls_uri: URIRef) -> List[URIRef]:
+        return self.subclass_map.get(cls_uri, [])

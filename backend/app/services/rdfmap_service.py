@@ -2,13 +2,11 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-import yaml
+from typing import Dict, Any, Optional
 
 # Import from correct module paths
 from rdfmap.generator.mapping_generator import MappingGenerator, GeneratorConfig
 from rdfmap.generator.ontology_analyzer import OntologyAnalyzer
-from rdfmap.generator.data_analyzer import DataSourceAnalyzer
 from rdfmap.emitter.graph_builder import RDFGraphBuilder, serialize_graph
 from rdfmap.models.errors import ProcessingReport
 from rdfmap.parsers.data_source import create_parser
@@ -89,12 +87,12 @@ class RDFMapService:
             for class_uri, ont_class in analyzer.classes.items():
                 classes.append({
                     "uri": class_uri,
-                    "label": ont_class.label,
-                    "comment": ont_class.comment,
+                    "label": getattr(ont_class, 'label', None),
+                    "comment": getattr(ont_class, 'comment', None),
                     "skos_labels": {
-                        "pref_label": ont_class.skos_pref_label,
-                        "alt_labels": ont_class.skos_alt_labels,
-                        "hidden_labels": ont_class.skos_hidden_labels,
+                        "pref_label": getattr(ont_class, 'skos_pref_label', None),
+                        "alt_labels": getattr(ont_class, 'skos_alt_labels', []),
+                        "hidden_labels": getattr(ont_class, 'skos_hidden_labels', []),
                     }
                 })
 
@@ -103,17 +101,17 @@ class RDFMapService:
             for prop_uri, ont_prop in analyzer.properties.items():
                 properties.append({
                     "uri": prop_uri,
-                    "label": ont_prop.label,
-                    "comment": ont_prop.comment,
-                    "property_type": ont_prop.property_type,
-                    "domain": ont_prop.domain,
-                    "range": ont_prop.range,
+                    "label": getattr(ont_prop, 'label', None),
+                    "comment": getattr(ont_prop, 'comment', None),
+                    "property_type": getattr(ont_prop, 'property_type', None),
+                    "domain": getattr(ont_prop, 'domain', None),
+                    "range": getattr(ont_prop, 'range', None),
                     "is_functional": getattr(ont_prop, 'is_functional', False),
                     "is_inverse_functional": getattr(ont_prop, 'is_inverse_functional', False),
                     "skos_labels": {
-                        "pref_label": ont_prop.skos_pref_label,
-                        "alt_labels": ont_prop.skos_alt_labels,
-                        "hidden_labels": ont_prop.skos_hidden_labels,
+                        "pref_label": getattr(ont_prop, 'skos_pref_label', None),
+                        "alt_labels": getattr(ont_prop, 'skos_alt_labels', []),
+                        "hidden_labels": getattr(ont_prop, 'skos_hidden_labels', []),
                     }
                 })
 
@@ -134,24 +132,50 @@ class RDFMapService:
         return mapping_config
 
     def summarize_mapping(self, mapping_config: dict) -> dict:
-        """Produce summary (counts, per-sheet mapping stats)."""
+        """Produce summary (counts, per-sheet mapping stats) including object properties."""
         if not isinstance(mapping_config, dict):
             return {}
         summary_sheets = []
         total_columns = 0
         mapped_columns = 0
+
         for sheet in mapping_config.get('sheets', []):
+            # Count direct column mappings (data properties)
             cols = sheet.get('columns', {}) or {}
-            # FIX: correct variable names in comprehension
-            mapped = [name for name, val in cols.items() if isinstance(val, dict) and val.get('as')]
+            direct_mapped = [name for name, val in cols.items() if isinstance(val, dict) and val.get('as')]
+
+            # Count object property mappings
+            objects = sheet.get('objects', {}) or {}
+            object_count = len(objects)  # Each object = 1 foreign key column
+
+            # Count columns used in object properties
+            object_columns = []
+            for obj_name, obj_config in objects.items():
+                if isinstance(obj_config, dict):
+                    properties = obj_config.get('properties', []) or []
+                    for prop in properties:
+                        if isinstance(prop, dict):
+                            col = prop.get('column')
+                            if col:
+                                object_columns.append(col)
+
+            # Total mapped = direct columns + FK columns + object property columns
+            all_mapped_columns = direct_mapped + object_columns
+            sheet_total = len(cols) + object_count + len(object_columns)
+            sheet_mapped = len(all_mapped_columns) + object_count
+
             summary_sheets.append({
                 'sheet': sheet.get('name'),
-                'total_columns': len(cols),
-                'mapped_columns': len(mapped),
-                'mapped_column_names': mapped,
+                'total_columns': sheet_total,
+                'mapped_columns': sheet_mapped,
+                'direct_mappings': direct_mapped,
+                'object_properties': object_count,
+                'object_data_properties': object_columns,
             })
-            total_columns += len(cols)
-            mapped_columns += len(mapped)
+
+            total_columns += sheet_total
+            mapped_columns += sheet_mapped
+
         rate = (mapped_columns/total_columns*100.0) if total_columns else 0.0
         return {
             'statistics': {
@@ -189,7 +213,7 @@ class RDFMapService:
         """
         try:
             logger.info(f"Generating mappings for project {project_id}")
-            config = GeneratorConfig(base_iri=base_iri, min_confidence=min_confidence)
+            config = GeneratorConfig(base_iri=base_iri, min_confidence=min_confidence, imports=[ontology_file_path])
             generator = MappingGenerator(
                 ontology_file=ontology_file_path,
                 data_file=data_file_path,
@@ -202,17 +226,48 @@ class RDFMapService:
             mapping_file = project_dir / "mapping_config.yaml"
             if isinstance(mapping_config, dict):
                 mapping_config.setdefault('defaults', {}).setdefault('base_iri', base_iri)
+                # Ensure ontology import is present for validation
+                imports = mapping_config.get('imports') or []
+                if ontology_file_path not in imports:
+                    imports.append(ontology_file_path)
+                # Include SKOS files from project config if available
+                try:
+                    from ..database import SessionLocal
+                    from ..models.project import Project
+                    db = SessionLocal()
+                    proj = db.get(Project, project_id)
+                    skos_files = []
+                    if proj and proj.config and isinstance(proj.config, dict):
+                        skos_files = list(proj.config.get('skos_files', []) or [])
+                    db.close()
+                    for sk in skos_files:
+                        if sk not in imports:
+                            imports.append(sk)
+                except Exception as e:
+                    logger.warning(f"Failed to include SKOS files in imports: {e}")
+                mapping_config['imports'] = imports
             generator.mapping = mapping_config
             generator.save_yaml(str(mapping_file))
+            # Export alignment report artifacts
+            report_json = self.data_dir / project_id / 'alignment_report.json'
+            report_html = self.data_dir / project_id / 'alignment_report.html'
+            try:
+                if alignment_report:
+                    generator.alignment_report = alignment_report
+                    generator.export_alignment_report(str(report_json))
+                    generator.export_alignment_html(str(report_html))
+            except Exception as e:
+                logger.warning(f"Failed to export alignment report: {e}")
             summary = self.summarize_mapping(mapping_config)
             return {
                 "mapping_config": mapping_config,
                 "mapping_file": str(mapping_file),
                 "alignment_report": alignment_report.to_dict() if alignment_report else {},
+                "alignment_report_json": str(report_json),
+                "alignment_report_html": str(report_html),
                 "mapping_summary": summary,
                 "formatted_yaml": open(mapping_file).read(),
             }
-
         except Exception as e:
             logger.error(f"Error generating mappings: {e}", exc_info=True)
             raise
@@ -226,15 +281,6 @@ class RDFMapService:
     ) -> Dict[str, Any]:
         """
         Convert data to RDF using mapping configuration.
-
-        Args:
-            project_id: Project identifier
-            mapping_file_path: Path to mapping config (uses saved if None)
-            output_format: RDF format (turtle, json-ld, xml, nt)
-            validate: Whether to validate output
-
-        Returns:
-            Dictionary with output file path and validation results
         """
         try:
             logger.info(f"Converting project {project_id} to RDF")
@@ -246,9 +292,38 @@ class RDFMapService:
 
             config = load_mapping_config(mapping_file_path)
 
+            # Attempt to discover ontology from imports or fallback to uploaded ontology
+            discovered_ontology_path = None
+            if config.imports and len(config.imports) > 0:
+                discovered_ontology_path = config.imports[0]
+            else:
+                # Fallback: look in uploads dir for ontology.*
+                uploads_project_dir = self.uploads_dir / project_id
+                candidates = list(uploads_project_dir.glob("ontology.*"))
+                if candidates:
+                    discovered_ontology_path = str(candidates[0])
+                    # Persist this into the mapping YAML for future runs
+                    try:
+                        import yaml
+                        with open(mapping_file_path, 'r') as f:
+                            raw_cfg = yaml.safe_load(f) or {}
+                        raw_cfg.setdefault('imports', []).insert(0, discovered_ontology_path)
+                        with open(mapping_file_path, 'w') as f:
+                            yaml.safe_dump(raw_cfg, f, sort_keys=False)
+                        # Reload config to pick up new imports
+                        config = load_mapping_config(mapping_file_path)
+                    except Exception as pe:
+                        logger.warning(f"Failed to persist discovered ontology import: {pe}")
+
             # Initialize report and builder
             report = ProcessingReport()
-            builder = RDFGraphBuilder(config, report)
+            onto_analyzer = None
+            if discovered_ontology_path:
+                try:
+                    onto_analyzer = OntologyAnalyzer(discovered_ontology_path, imports=config.imports)
+                except Exception as e:
+                    logger.warning(f"Failed to load ontology for structural validation: {e}")
+            builder = RDFGraphBuilder(config, report, ontology_analyzer=onto_analyzer)
 
             # For each sheet, parse its source into DataFrames and add to builder
             for sheet in config.sheets:
@@ -280,35 +355,32 @@ class RDFMapService:
             logger.info(f"RDF output saved to {output_file} with {builder.get_triple_count()} triples")
 
             # Validation (optional)
-            validation_results = None
-            if validate:
-                try:
-                    from rdfmap.validator.shacl import validate_rdf
-                    # Determine ontology path if present in config imports
-                    ontology_path = None
-                    if config.imports and len(config.imports) > 0:
-                        ontology_path = config.imports[0]
-
-                    if ontology_path:
-                        validation_results = validate_rdf(
-                            str(output_file),
-                            ontology_path,
-                        )
-                    else:
-                        validation_results = {"status": "skipped", "reason": "No ontology specified in config imports"}
-                except Exception as ve:
-                    logger.warning(f"Validation failed: {ve}")
-                    validation_results = {"status": "error", "error": str(ve)}
+            ontology_structural = {
+                "domain_violations": report.domain_violations,
+                "range_violations": report.range_violations,
+                "samples": report.structural_samples,
+                "compliance_rate": 1.0 if builder.get_triple_count()==0 else (1.0 - ((report.domain_violations + report.range_violations) / builder.get_triple_count()))
+            }
+            reasoning_metrics = {
+                "inferred_types": report.inferred_types,
+                "inverse_links_added": report.inverse_links_added,
+                "transitive_links_added": report.transitive_links_added,
+                "symmetric_links_added": report.symmetric_links_added,
+                "cardinality_violations": report.cardinality_violations,
+                "min_cardinality_violations": report.min_cardinality_violations,
+                "max_cardinality_violations": report.max_cardinality_violations,
+                "exact_cardinality_violations": report.exact_cardinality_violations,
+            }
 
             return {
                 "output_file": str(output_file),
                 "format": output_format,
                 "triple_count": builder.get_triple_count(),
-                "validation": validation_results,
+                "ontology_structural": ontology_structural,
+                "reasoning": reasoning_metrics,
                 "errors": [str(e) for e in report.errors] if report.errors else [],
-                "warnings": [str(w) for w in report.warnings] if report.warnings else [],
+                "warnings": report.warnings,
             }
-
         except Exception as e:
             logger.error(f"Error converting to RDF: {e}", exc_info=True)
             raise

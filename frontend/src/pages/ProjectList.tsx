@@ -74,10 +74,11 @@ export default function ProjectList() {
 
   if (queryError) {
     return (
-      <Box>
-        <Alert severity="error">
-          Failed to load projects: {(queryError as any).message}
+      <Box sx={{ textAlign:'center', mt:8 }}>
+        <Alert severity="error" sx={{ mb:2 }}>
+          {(queryError as any).message || 'Failed to load projects.'}
         </Alert>
+        <Button variant="outlined" onClick={()=> refetch()}>Retry</Button>
       </Box>
     )
   }

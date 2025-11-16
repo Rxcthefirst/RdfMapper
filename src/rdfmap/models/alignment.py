@@ -131,6 +131,16 @@ class WeakMatch(BaseModel):
     )
 
 
+class MatchDetail(BaseModel):
+    """Full details for a mapped column (reason/explanation)."""
+    column_name: str = Field(description="Name of the column")
+    matched_property: str = Field(description="URI of the matched property")
+    match_type: MatchType = Field(description="How the match was made")
+    confidence_score: float = Field(ge=0.0, le=1.0)
+    matcher_name: str = Field(description="Matcher that produced the result")
+    matched_via: str = Field(description="The label/text or signal that led to this match")
+
+
 class AlignmentStatistics(BaseModel):
     """Summary statistics for the alignment."""
     total_columns: int = Field(description="Total number of columns in spreadsheet")
@@ -186,6 +196,7 @@ class AlignmentReport(BaseModel):
         default=None,
         description="Comprehensive ontology context for informed mapping decisions"
     )
+    match_details: List[MatchDetail] = Field(default_factory=list, description="Detailed reasons for all mapped columns")
 
     # Configuration
     class Config:
@@ -530,6 +541,46 @@ class AlignmentReport(BaseModel):
                     <td>{property_short}</td>
                     <td><span class="confidence confidence-{conf_class}">{match.confidence_score:.2f}</span></td>
                     <td><span class="badge badge-{conf_class}">{match.match_type.value}</span></td>
+                </tr>
+"""
+            html += """
+            </tbody>
+        </table>
+    </div>
+"""
+
+        # Match Details section (all mapped columns with reasons)
+        if self.match_details:
+            html += """
+    <div class="section">
+        <h2>✓ Match Details</h2>
+        <p style="color: #155724; font-size: 14px; margin-bottom: 15px;">
+            Detailed reasons for all mapped columns showing matcher type and confidence.
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Column</th>
+                    <th>Property</th>
+                    <th>Match Type</th>
+                    <th>Matcher</th>
+                    <th>Matched Via</th>
+                    <th>Confidence</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+            for detail in self.match_details:
+                conf_class = "high" if detail.confidence_score >= 0.8 else "medium" if detail.confidence_score >= 0.5 else "low"
+                property_short = detail.matched_property.split('#')[-1].split('/')[-1]
+                html += f"""
+                <tr>
+                    <td><strong>{detail.column_name}</strong></td>
+                    <td>{property_short}</td>
+                    <td><span class="badge badge-{conf_class}">{detail.match_type.value.replace('_', ' ').title()}</span></td>
+                    <td>{detail.matcher_name}</td>
+                    <td><em>{detail.matched_via}</em></td>
+                    <td><span class="confidence confidence-{conf_class}">{detail.confidence_score:.2f}</span></td>
                 </tr>
 """
             html += """

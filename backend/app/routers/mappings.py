@@ -72,6 +72,7 @@ async def generate_mappings(
             "alignment_report": result["alignment_report"],
             "mapping_summary": result.get("mapping_summary"),
             "formatted_yaml": result.get("formatted_yaml"),
+            "match_details": result["alignment_report"].get("match_details", []) if result.get("alignment_report") else [],
             "mapping_preview": {
                 "base_iri": result["mapping_config"].get("defaults", {}).get("base_iri"),
                 "target_class": result["mapping_config"].get("sheets", [{}])[0].get("row_resource", {}).get("class"),

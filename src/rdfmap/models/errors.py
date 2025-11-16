@@ -36,7 +36,18 @@ class ProcessingReport(BaseModel):
     errors: List[ProcessingError] = Field(default_factory=list, description="All errors")
     start_time: datetime = Field(default_factory=datetime.now, description="Processing start time")
     end_time: Optional[datetime] = Field(None, description="Processing end time")
-    
+    domain_violations: int = Field(0, description="Number of domain constraint violations")
+    range_violations: int = Field(0, description="Number of range/datatype constraint violations")
+    structural_samples: List[str] = Field(default_factory=list, description="Sample structural violation messages")
+    inferred_types: int = Field(0, description="Number of rdf:type inferences added")
+    inverse_links_added: int = Field(0, description="Number of inverse property triples materialized")
+    transitive_links_added: int = Field(0, description="Number of transitive property links materialized")
+    symmetric_links_added: int = Field(0, description="Number of symmetric property links materialized")
+    cardinality_violations: int = Field(0, description="Number of cardinality restriction violations")
+    min_cardinality_violations: int = Field(0, description="Number of minCardinality restriction violations")
+    max_cardinality_violations: int = Field(0, description="Number of maxCardinality restriction violations")
+    exact_cardinality_violations: int = Field(0, description="Number of exact cardinality restriction violations")
+
     def add_error(
         self,
         error: str,
@@ -64,6 +75,30 @@ class ProcessingReport(BaseModel):
         """Finalize the report."""
         self.end_time = datetime.now()
         self.successful_rows = self.total_rows - self.failed_rows
+
+    def add_structural_violation(self, message: str, is_domain: bool = False) -> None:
+        if is_domain:
+            self.domain_violations += 1
+        else:
+            self.range_violations += 1
+        # Keep only first 10 samples
+        if len(self.structural_samples) < 10:
+            self.structural_samples.append(message)
+
+    def add_cardinality_violation(self, message: str) -> None:
+        self.cardinality_violations += 1
+        if len(self.structural_samples) < 10:
+            self.structural_samples.append(message)
+
+    def add_cardinality_restriction_violation(self, message: str, kind: str):
+        if kind == 'min':
+            self.min_cardinality_violations += 1
+        elif kind == 'max':
+            self.max_cardinality_violations += 1
+        elif kind == 'exact':
+            self.exact_cardinality_violations += 1
+        if len(self.structural_samples) < 10:
+            self.structural_samples.append(message)
 
 
 class ValidationResult(BaseModel):

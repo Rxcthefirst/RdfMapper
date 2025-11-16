@@ -1015,21 +1015,42 @@ class MappingGenerator:
 
         # Collect weak matches (and add their suggestions to existing list)
         weak_matches = []
-        
+        match_details = []  # new: record reasons for all mapped columns
+
         confidence_scores = []
         for col_name, (prop, match_type, confidence) in self._mapped_columns.items():
             confidence_scores.append(confidence)
             confidence_level = get_confidence_level(confidence)
-            
+            # Record full match detail (matcher/matched_via where available)
+            try:
+                # If we used a pipeline, get top candidates to extract matcher name and matched_via
+                context = MatchContext(
+                    column=self.data_source.get_analysis(col_name),
+                    all_columns=[self.data_source.get_analysis(c) for c in self.data_source.get_column_names()],
+                    available_properties=self.ontology.get_datatype_properties(target_class.uri)
+                )
+                top = self.matcher_pipeline.match_all(context.column, context.available_properties, context, top_k=1)
+                matcher_name = top[0].matcher_name if top else 'pipeline'
+                matched_via = top[0].matched_via if top else (prop.label or str(prop.uri).split('#')[-1])
+            except Exception:
+                matcher_name = 'pipeline'
+                matched_via = prop.label or str(prop.uri).split('#')[-1]
+            from ..models.alignment import MatchDetail
+            match_details.append(MatchDetail(
+                column_name=col_name,
+                matched_property=str(prop.uri),
+                match_type=match_type,
+                confidence_score=confidence,
+                matcher_name=matcher_name,
+                matched_via=matched_via,
+            ))
+
             # Track weak matches (confidence < 0.8)
             if confidence < 0.8:
                 col_analysis = self.data_source.get_analysis(col_name)
-
-                # Generate SKOS enrichment suggestion
                 suggestion = self._generate_skos_suggestion(
                     col_name, prop, match_type
                 )
-                
                 weak_match = WeakMatch(
                     column_name=col_name,
                     matched_property=str(prop.uri),
@@ -1041,20 +1062,77 @@ class MappingGenerator:
                     suggestions=[suggestion] if suggestion else []
                 )
                 weak_matches.append(weak_match)
-                
                 if suggestion:
                     skos_suggestions.append(suggestion)
-        
+
         # Calculate statistics
         total_columns = len(self.data_source.get_column_names())
-        mapped_columns = len(self._mapped_columns)
-        unmapped_columns = len(self._unmapped_columns)
-        
+
+        # Include direct mapped columns + object property columns + FK columns from object iri_templates
+        direct_mapped_cols = set(self._mapped_columns.keys())
+        object_prop_cols = set()
+        fk_cols = set()
+        # Get actual data columns for validation
+        data_cols = set(self.data_source.get_column_names())
+
+        try:
+            # Extract from current mapping (sheets[0])
+            mapping = getattr(self, 'mapping', {}) or {}
+            sheets = mapping.get('sheets', []) if isinstance(mapping, dict) else []
+            if sheets:
+                sheet0 = sheets[0]
+                objects = sheet0.get('objects', {}) or {}
+                # Object data properties columns
+                for obj_name, obj in objects.items():
+                    obj_class_uri = obj.get('class', '')
+                    for p in obj.get('properties') or []:
+                        col = p.get('column')
+                        prop_uri = p.get('as', '')
+                        if col:
+                            object_prop_cols.add(col)
+                            # Add match detail for object property column
+                            from ..models.alignment import MatchDetail
+                            match_details.append(MatchDetail(
+                                column_name=col,
+                                matched_property=prop_uri,
+                                match_type=MatchType.EXACT_LABEL,  # Object properties are typically matched explicitly
+                                confidence_score=0.95,
+                                matcher_name='ObjectPropertyMatcher',
+                                matched_via=f'{obj_name} property',
+                            ))
+                # FK columns via iri_template placeholders
+                import re
+                for obj_name, obj in objects.items():
+                    iri = obj.get('iri_template') or ''
+                    predicate = obj.get('predicate', '')
+                    obj_class_uri = obj.get('class', '')
+                    # Extract placeholders but filter out template variables like base_iri
+                    template_vars = {'base_iri', 'class', 'sheet'}  # Common non-column template vars
+                    for col in re.findall(r'{([^}]+)}', iri):
+                        # Only track actual column names from the data source
+                        if col not in fk_cols and col not in template_vars and col in data_cols:
+                            fk_cols.add(col)
+                            # Add match detail for FK column
+                            from ..models.alignment import MatchDetail
+                            match_details.append(MatchDetail(
+                                column_name=col,
+                                matched_property=predicate,
+                                match_type=MatchType.GRAPH_REASONING,  # FK is a relationship
+                                confidence_score=1.0,
+                                matcher_name='RelationshipMatcher',
+                                matched_via=f'Foreign key to {obj_name}',
+                            ))
+        except Exception as e:
+            pass
+        # Count mapped columns (intersection with actual data columns)
+        mapped_columns = len((direct_mapped_cols | object_prop_cols | fk_cols) & data_cols)
+        unmapped_columns = max(0, total_columns - mapped_columns)
+
         high_conf = sum(1 for c in confidence_scores if c >= 0.8)
         medium_conf = sum(1 for c in confidence_scores if 0.5 <= c < 0.8)
         low_conf = sum(1 for c in confidence_scores if 0.3 <= c < 0.5)
         very_low_conf = sum(1 for c in confidence_scores if c < 0.3)
-        
+
         avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
         success_rate = mapped_columns / total_columns if total_columns > 0 else 0.0
 
@@ -1078,7 +1156,8 @@ class MappingGenerator:
             unmapped_columns=unmapped_details,
             weak_matches=weak_matches,
             skos_enrichment_suggestions=skos_suggestions,
-            ontology_context=ontology_context
+            ontology_context=ontology_context,
+            match_details=match_details,
         )
 
     def _generate_skos_suggestion(

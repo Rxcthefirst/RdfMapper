@@ -96,11 +96,12 @@ async def get_job_status(task_id: str):
 
 
 @router.get("/{project_id}/download")
-async def download_rdf(project_id: str):
-    """Download the generated RDF file (turtle by default)."""
+async def download_rdf(project_id: str, format: Optional[str] = Query(None)):
+    """Download the generated RDF file. If format is provided, return that specific file; otherwise return the most recent output.* file."""
     project_dir = Path(settings.DATA_DIR) / project_id
-    # Try known extensions in preference order
-    for ext in ["ttl", "jsonld", "rdf", "nt", "n3"]:
+    ext_map = {"turtle":"ttl","json-ld":"jsonld","xml":"rdf","nt":"nt","n3":"n3"}
+    if format:
+        ext = ext_map.get(format, format)
         candidate = project_dir / f"output.{ext}"
         if candidate.exists():
             from fastapi.responses import FileResponse
@@ -112,4 +113,19 @@ async def download_rdf(project_id: str):
                 "n3": "text/n3",
             }
             return FileResponse(str(candidate), media_type=media_types.get(ext, "text/plain"), filename=f"rdfmap-output.{ext}")
-    raise HTTPException(status_code=404, detail="RDF output file not found. Run conversion first.")
+        raise HTTPException(status_code=404, detail=f"Requested format not found: {format}")
+    # No format specified: choose most recent output.* by mtime
+    candidates = list(project_dir.glob("output.*"))
+    if not candidates:
+        raise HTTPException(status_code=404, detail="RDF output file not found. Run conversion first.")
+    latest = max(candidates, key=lambda p: p.stat().st_mtime)
+    from fastapi.responses import FileResponse
+    ext = latest.suffix.lstrip('.')
+    media_types = {
+        "ttl": "text/turtle",
+        "jsonld": "application/ld+json",
+        "rdf": "application/rdf+xml",
+        "nt": "application/n-triples",
+        "n3": "text/n3",
+    }
+    return FileResponse(str(latest), media_type=media_types.get(ext, "text/plain"), filename=f"rdfmap-output.{ext}")

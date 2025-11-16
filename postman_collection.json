@@ -1,0 +1,467 @@
+{
+  "info": {
+    "name": "RDFMap API Test Suite",
+    "description": "Complete API test suite for RDFMap Semantic Model Data Mapper",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "project_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/health",
+          "host": ["{{base_url}}"],
+          "path": ["api", "health"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "List Projects",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response is an array\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.be.an('array');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/projects/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", ""]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Project",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Project has ID\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('id');",
+              "    pm.collectionVariables.set('project_id', jsonData.id);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Test Project\",\n  \"description\": \"API test project\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/projects/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", ""]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Project",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Data File",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "examples/mortgage/data/loans.csv"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}/upload-data",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}", "upload-data"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Ontology File",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "examples/mortgage/ontology/mortgage.ttl"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}/upload-ontology",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}", "upload-ontology"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Upload SKOS Vocabulary",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "examples/mortgage/vocabulary/mortgage-vocab.ttl"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}/upload-skos",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}", "upload-skos"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Upload SHACL Shapes",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "examples/mortgage/shapes/mortgage-shapes.ttl"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}/upload-shapes",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}", "upload-shapes"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Data Preview",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}/data-preview?limit=5",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}", "data-preview"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Ontology Analysis",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}/ontology-analysis",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}", "ontology-analysis"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update Project Settings (Enable Reasoning)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"enable_reasoning\": true\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}/settings",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}", "settings"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Generate Mappings",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Has mapping config\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('mapping_config');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/mappings/{{project_id}}/generate?use_semantic=true&min_confidence=0.5",
+          "host": ["{{base_url}}"],
+          "path": ["api", "mappings", "{{project_id}}", "generate"],
+          "query": [
+            {
+              "key": "use_semantic",
+              "value": "true"
+            },
+            {
+              "key": "min_confidence",
+              "value": "0.5"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Mapping Config",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/mappings/{{project_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "mappings", "{{project_id}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Mapping YAML",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/mappings/{{project_id}}?raw=true",
+          "host": ["{{base_url}}"],
+          "path": ["api", "mappings", "{{project_id}}"],
+          "query": [
+            {
+              "key": "raw",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Convert to RDF (Sync)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Has triple count\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('triple_count');",
+              "});",
+              "",
+              "pm.test(\"Has reasoning metrics\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('reasoning');",
+              "    pm.expect(jsonData.reasoning).to.have.property('inferred_types');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/conversion/{{project_id}}?output_format=turtle&validate=true",
+          "host": ["{{base_url}}"],
+          "path": ["api", "conversion", "{{project_id}}"],
+          "query": [
+            {
+              "key": "output_format",
+              "value": "turtle"
+            },
+            {
+              "key": "validate",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Convert to RDF (JSON-LD)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/conversion/{{project_id}}?output_format=json-ld&validate=false",
+          "host": ["{{base_url}}"],
+          "path": ["api", "conversion", "{{project_id}}"],
+          "query": [
+            {
+              "key": "output_format",
+              "value": "json-ld"
+            },
+            {
+              "key": "validate",
+              "value": "false"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Download RDF Output",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/conversion/{{project_id}}/download",
+          "host": ["{{base_url}}"],
+          "path": ["api", "conversion", "{{project_id}}", "download"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Remove SKOS File",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}/skos?file=/app/uploads/{{project_id}}/skos.ttl",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}", "skos"],
+          "query": [
+            {
+              "key": "file",
+              "value": "/app/uploads/{{project_id}}/skos.ttl"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Remove SHACL Shapes",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}/shapes",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}", "shapes"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Project",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/projects/{{project_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "projects", "{{project_id}}"]
+        }
+      },
+      "response": []
+    }
+  ]
+}
+
