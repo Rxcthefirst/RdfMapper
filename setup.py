@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="rdfmap",
-    version="0.1.0",
+    version="0.3.0",
     author="Enterprise Data Engineering",
     description="Convert spreadsheet data to RDF triples aligned with ontologies",
     long_description=long_description,
