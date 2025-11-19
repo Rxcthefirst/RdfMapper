@@ -1,0 +1,134 @@
+version: '3.8'
+    driver: bridge
+  rdfmap-network:
+networks:
+
+    driver: local
+  rdf_data:
+    driver: local
+  upload_data:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_data:
+volumes:
+
+      - rdfmap-network
+    networks:
+      - rdf_data:/app/data
+      - upload_data:/app/uploads
+    volumes:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db:
+    depends_on:
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://rdfmap:rdfmap@db:5432/rdfmap}
+    environment:
+    command: celery -A app.worker:celery_app worker --loglevel=info --concurrency=2
+    restart: unless-stopped
+    container_name: rdfmap-worker
+        RDFMAP_VERSION: ${RDFMAP_VERSION:-0.3.0}
+      args:
+      dockerfile: Dockerfile
+      context: ./backend
+    build:
+    image: rxcthefirst/rdfmap-api:${VERSION:-latest}
+  worker:
+  # Celery Worker
+
+      retries: 5
+      timeout: 3s
+      interval: 10s
+      test: ["CMD", "redis-cli", "ping"]
+    healthcheck:
+      - rdfmap-network
+    networks:
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - redis_data:/data
+    volumes:
+    restart: unless-stopped
+    container_name: rdfmap-redis
+    image: redis:7-alpine
+  redis:
+  # Redis
+
+      retries: 5
+      timeout: 5s
+      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U rdfmap"]
+    healthcheck:
+      - rdfmap-network
+    networks:
+      - postgres_data:/var/lib/postgresql/data
+    volumes:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-rdfmap}
+      - POSTGRES_USER=${POSTGRES_USER:-rdfmap}
+      - POSTGRES_DB=${POSTGRES_DB:-rdfmap}
+    environment:
+    restart: unless-stopped
+    container_name: rdfmap-db
+    image: postgres:16-alpine
+  db:
+  # PostgreSQL Database
+
+      retries: 3
+      timeout: 5s
+      interval: 30s
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+    healthcheck:
+      - rdfmap-network
+    networks:
+      - api
+    depends_on:
+      - "8080:8080"
+    ports:
+    restart: unless-stopped
+    container_name: rdfmap-ui
+      target: production
+      dockerfile: Dockerfile
+      context: ./frontend
+    build:
+    image: rxcthefirst/rdfmap-ui:${VERSION:-latest}
+  ui:
+  # Frontend UI
+
+      start_period: 40s
+      retries: 3
+      timeout: 10s
+      interval: 30s
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+    healthcheck:
+      - rdfmap-network
+    networks:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db:
+    depends_on:
+      - rdf_data:/app/data
+      - upload_data:/app/uploads
+    volumes:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://rdfmap:rdfmap@db:5432/rdfmap}
+    environment:
+      - "8000:8000"
+    ports:
+    restart: unless-stopped
+    container_name: rdfmap-api
+        RDFMAP_VERSION: ${RDFMAP_VERSION:-0.3.0}
+      args:
+      dockerfile: Dockerfile
+      context: ./backend
+    build:
+    image: rxcthefirst/rdfmap-api:${VERSION:-latest}
+  api:
+  # Backend API
+services:
+
+

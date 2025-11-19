@@ -71,6 +71,27 @@ See [FINAL_ACHIEVEMENT_REPORT.md](docs/FINAL_ACHIEVEMENT_REPORT.md) for complete
 
 ## 🚀 Installation
 
+### Quick Start with Docker (Recommended)
+
+Get started in seconds with our pre-built Docker images:
+
+```bash
+# Pull and run the complete stack
+curl -O https://raw.githubusercontent.com/Rxcthefirst/RdfMapper/main/docker-compose.prod.yml
+docker-compose -f docker-compose.prod.yml up -d
+
+# Access the UI at http://localhost:8080
+```
+
+**What you get**:
+- 🎨 Web UI (React + Vite)
+- ⚙️ REST API (FastAPI)
+- 🔄 Background workers (Celery)
+- 💾 Database (PostgreSQL)
+- 📮 Task queue (Redis)
+
+See **[Docker Deployment Guide](DOCKER_DEPLOYMENT_GUIDE.md)** for detailed instructions.
+
 ### Requirements
 - Python 3.11+ (recommended: Python 3.13)
 
