@@ -11,6 +11,9 @@ from ..models.mapping import MappingConfig
 def load_mapping_config(config_path: Union[str, Path]) -> MappingConfig:
     """Load and validate mapping configuration from YAML or JSON file.
     
+    Supports both YARRRML standard format and internal format.
+    Auto-detects format and converts YARRRML to internal representation.
+
     Args:
         config_path: Path to configuration file
         
@@ -36,6 +39,14 @@ def load_mapping_config(config_path: Union[str, Path]) -> MappingConfig:
         else:
             raise ValueError(f"Unsupported config file format: {config_path.suffix}")
     
+    # Detect format and convert YARRRML if needed
+    format_type = _detect_format(config_data)
+
+    if format_type == 'yarrrml':
+        # Convert YARRRML to internal format
+        from .yarrrml_parser import yarrrml_to_internal
+        config_data = yarrrml_to_internal(config_data, config_path.parent)
+
     # Validate with Pydantic
     try:
         config = MappingConfig(**config_data)
@@ -60,3 +71,25 @@ def load_mapping_config(config_path: Union[str, Path]) -> MappingConfig:
             config.validation.shacl.shapes_file = str(config_dir / shapes_path)
     
     return config
+
+
+def _detect_format(config_data: dict) -> str:
+    """
+    Detect if config is YARRRML or internal format.
+
+    Args:
+        config_data: Parsed configuration dictionary
+
+    Returns:
+        'yarrrml' or 'internal'
+    """
+    # YARRRML has 'prefixes' and 'mappings'
+    if 'prefixes' in config_data and 'mappings' in config_data:
+        return 'yarrrml'
+
+    # Internal format has 'namespaces' and 'sheets'
+    if 'namespaces' in config_data and 'sheets' in config_data:
+        return 'internal'
+
+    # Default to internal for backward compatibility
+    return 'internal'

@@ -19,6 +19,7 @@ class MatchType(str, Enum):
     EXACT_HIDDEN_LABEL = "exact_hidden_label"  # Exact match with skos:hiddenLabel
     EXACT_LOCAL_NAME = "exact_local_name"  # Exact match with property local name
     SEMANTIC_SIMILARITY = "semantic_similarity"  # Semantic embedding similarity
+    DATA_TYPE_COMPATIBILITY = "data_type_compatibility"  # Inferred datatype matches property range
     PARTIAL = "partial"  # Partial string match
     FUZZY = "fuzzy"  # Fuzzy/similarity match
     MANUAL = "manual"  # Manually specified in config
@@ -131,6 +132,39 @@ class WeakMatch(BaseModel):
     )
 
 
+class AdjustmentItem(BaseModel):
+    """Record of a confidence adjustment (booster or penalty)."""
+    type: str = Field(description="Adjustment type (e.g., 'booster_total', 'ambiguity')")
+    value: float = Field(ge=0.0, le=1.0, description="Adjustment magnitude")
+
+
+class EvidenceItem(BaseModel):
+    """Evidence from a single matcher contributing to a match decision."""
+    matcher_name: str = Field(description="Name of the matcher that produced this evidence")
+    match_type: str = Field(description="Match type from this matcher (as string for flexibility)")
+    confidence: float = Field(ge=0.0, le=1.0, description="Raw confidence from this matcher")
+    matched_via: str = Field(description="The label, signal, or reasoning text used")
+    evidence_category: str = Field(
+        default="other",
+        description="Category of evidence: 'semantic', 'ontological_validation', 'structural_context', or 'other'"
+    )
+
+
+class EvidenceGroup(BaseModel):
+    """Grouped evidence by category with aggregated confidence."""
+    category: str = Field(description="Evidence category")
+    evidence_items: List[EvidenceItem] = Field(default_factory=list)
+    avg_confidence: float = Field(ge=0.0, le=1.0, description="Average confidence across items in this group")
+    description: str = Field(description="Human-readable description of this evidence category")
+
+
+class AlternateCandidate(BaseModel):
+    """An alternate property that was considered but not chosen as primary."""
+    property: str = Field(description="Alternate property URI")
+    combined_confidence: float = Field(ge=0.0, le=1.0, description="Combined confidence for this alternate")
+    evidence_count: int = Field(ge=0, description="Number of evidence items supporting this alternate")
+
+
 class MatchDetail(BaseModel):
     """Full details for a mapped column (reason/explanation)."""
     column_name: str = Field(description="Name of the column")
@@ -139,6 +173,40 @@ class MatchDetail(BaseModel):
     confidence_score: float = Field(ge=0.0, le=1.0)
     matcher_name: str = Field(description="Matcher that produced the result")
     matched_via: str = Field(description="The label/text or signal that led to this match")
+
+    # Extended transparency fields (optional, for evidence aggregation)
+    evidence: List[EvidenceItem] = Field(
+        default_factory=list,
+        description="All evidence from matchers supporting this match"
+    )
+    evidence_groups: List[EvidenceGroup] = Field(
+        default_factory=list,
+        description="Evidence organized by category (semantic, ontological, structural)"
+    )
+    reasoning_summary: Optional[str] = Field(
+        default=None,
+        description="Human-readable explanation showing how ontology validates semantic match"
+    )
+    boosters_applied: List[AdjustmentItem] = Field(
+        default_factory=list,
+        description="Boosters applied to base confidence"
+    )
+    penalties_applied: List[AdjustmentItem] = Field(
+        default_factory=list,
+        description="Penalties applied (e.g., ambiguity)"
+    )
+    ambiguity_group_size: Optional[int] = Field(
+        default=None,
+        description="Number of near-equal candidates (indicates ambiguity)"
+    )
+    alternates: List[AlternateCandidate] = Field(
+        default_factory=list,
+        description="Top alternate properties considered"
+    )
+    performance_metrics: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Performance metrics from parallel matcher execution"
+    )
 
 
 class AlignmentStatistics(BaseModel):
@@ -159,6 +227,19 @@ class AlignmentStatistics(BaseModel):
         ge=0.0,
         le=1.0,
         description="Average confidence score across all matches"
+    )
+    # Matcher performance statistics
+    matchers_fired_avg: Optional[float] = Field(
+        default=None,
+        description="Average number of matchers that fired per column"
+    )
+    avg_evidence_count: Optional[float] = Field(
+        default=None,
+        description="Average number of evidence items per match"
+    )
+    ontology_validation_rate: Optional[float] = Field(
+        default=None,
+        description="Percentage of matches with ontology matcher evidence (0-1)"
     )
 
 
@@ -656,6 +737,7 @@ def calculate_confidence_score(match_type: MatchType, similarity: float = 1.0) -
         MatchType.EXACT_HIDDEN_LABEL: 0.85,
         MatchType.EXACT_LOCAL_NAME: 0.80,
         MatchType.SEMANTIC_SIMILARITY: similarity,  # Use actual embedding similarity
+        MatchType.DATA_TYPE_COMPATIBILITY: 0.75,
         MatchType.PARTIAL: 0.60,
         MatchType.FUZZY: 0.40,
         MatchType.MANUAL: 1.0,

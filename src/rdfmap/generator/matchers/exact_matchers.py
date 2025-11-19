@@ -31,7 +31,7 @@ class ExactPrefLabelMatcher(ColumnPropertyMatcher):
                     return MatchResult(
                         property=prop,
                         match_type=MatchType.EXACT_PREF_LABEL,
-                        confidence=1.0,
+                        confidence=0.98,
                         matched_via=prop.pref_label,
                         matcher_name=self.name()
                     )

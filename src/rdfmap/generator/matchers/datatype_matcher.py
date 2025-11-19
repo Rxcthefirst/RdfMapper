@@ -19,7 +19,7 @@ class DataTypeInferenceMatcher(ColumnPropertyMatcher):
     1. Infers the actual data type from sample values
     2. Gets the expected data type from OWL restrictions
     3. Matches only if types are compatible
-    4. Provides high confidence when types align perfectly
+    4. Provides confidence based solely on type compatibility (no name similarity)
     """
 
     # XSD type hierarchy for compatibility checking
@@ -43,12 +43,14 @@ class DataTypeInferenceMatcher(ColumnPropertyMatcher):
         XSD.boolean
     }
 
-    def __init__(self, enabled: bool = True, threshold: float = 0.7):
+    def __init__(self, enabled: bool = True, threshold: float = 0.0):
         """Initialize the data type matcher.
 
         Args:
             enabled: Whether this matcher is active
             threshold: Minimum confidence for matches (0-1)
+                      Default 0.0 - always fire to provide type validation evidence
+                      Confidence kept moderate so it never wins alone, only validates other matches
         """
         super().__init__(enabled, threshold)
 
@@ -89,23 +91,43 @@ class DataTypeInferenceMatcher(ColumnPropertyMatcher):
             if not expected_types:
                 continue
 
-            # Check compatibility
+            # Check compatibility (always return result for evidence, even partial compatibility)
             compatibility = self._check_type_compatibility(inferred_type, expected_types)
             if compatibility > 0:
-                # Calculate confidence: type match + name similarity
-                name_similarity = self._calculate_name_similarity(column.name, prop)
-                confidence = (compatibility * 0.7) + (name_similarity * 0.3)
+                # Datatype matcher provides ontological validation evidence
+                # Confidence is moderate - validates other matches but doesn't win alone
+                # This shows that the ontology's type system aligns with the data
+                if compatibility >= 1.0:
+                    confidence = 0.68  # Perfect type match - strong validation
+                elif compatibility >= 0.9:
+                    confidence = 0.65  # Very compatible (e.g., int → decimal)
+                elif compatibility >= 0.7:
+                    confidence = 0.62  # Compatible with conversion
+                elif compatibility >= 0.5:
+                    confidence = 0.60  # Moderate compatibility
+                else:
+                    confidence = 0.58  # Minimal compatibility (still evidence)
 
-                if confidence > best_confidence and confidence >= self.threshold:
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    best_match = prop
+            elif compatibility > 0.3:
+                # Even weak compatibility provides evidence
+                confidence = 0.55
+                if confidence > best_confidence:
                     best_confidence = confidence
                     best_match = prop
 
         if best_match:
+            # Build detailed type compatibility message
+            expected_types_str = ', '.join(sorted(self._get_property_datatype(best_match)))
+            compatibility_pct = int(self._check_type_compatibility(inferred_type, self._get_property_datatype(best_match)) * 100)
+
             return MatchResult(
                 property=best_match,
-                match_type=MatchType.SEMANTIC_SIMILARITY,  # Could add DATA_TYPE_INFERENCE
+                match_type=MatchType.DATA_TYPE_COMPATIBILITY,
                 confidence=best_confidence,
-                matched_via=f"data type: {inferred_type}",
+                matched_via=f"Type validation: {inferred_type} → {expected_types_str} ({compatibility_pct}% compatible)",
                 matcher_name=self.name()
             )
 
@@ -207,14 +229,10 @@ class DataTypeInferenceMatcher(ColumnPropertyMatcher):
         if not expected_types:
             prop_name = str(prop.label or prop.uri).lower()
 
-            if any(term in prop_name for term in ['amount', 'price', 'cost', 'rate']):
-                expected_types.add('decimal')
-            elif any(term in prop_name for term in ['count', 'number', 'id', 'age']):
-                expected_types.add('integer')
-            elif any(term in prop_name for term in ['date', 'time', 'when']):
-                expected_types.add('date')
-            elif any(term in prop_name for term in ['flag', 'is', 'has']):
-                expected_types.add('boolean')
+            # Remove heuristic type inference from property names - this is too dangerous
+            # It causes wrong matches like "loanNumber" being inferred as integer just because "number" is in the name
+            # Datatype matcher should ONLY match on explicit range definitions in the ontology
+            pass
 
         return expected_types
 
@@ -272,37 +290,5 @@ class DataTypeInferenceMatcher(ColumnPropertyMatcher):
         column_name: str,
         prop: OntologyProperty
     ) -> float:
-        """Calculate simple name similarity.
-
-        Args:
-            column_name: Name of the column
-            prop: Property to compare against
-
-        Returns:
-            Similarity score (0-1)
-        """
-        col_clean = column_name.lower().replace('_', '').replace(' ', '')
-
-        # Check against all labels
-        labels = []
-        if prop.pref_label:
-            labels.append(prop.pref_label)
-        if prop.label:
-            labels.append(prop.label)
-        labels.extend(prop.alt_labels)
-
-        max_similarity = 0.0
-        for label in labels:
-            label_clean = label.lower().replace('_', '').replace(' ', '')
-
-            # Exact match
-            if col_clean == label_clean:
-                return 1.0
-
-            # Containment
-            if col_clean in label_clean or label_clean in col_clean:
-                similarity = min(len(col_clean), len(label_clean)) / max(len(col_clean), len(label_clean))
-                max_similarity = max(max_similarity, similarity)
-
-        return max_similarity
-
+        """Deprecated: Name similarity removed from datatype matcher (kept for backward compat, returns 0)."""
+        return 0.0

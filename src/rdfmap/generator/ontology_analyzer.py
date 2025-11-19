@@ -298,18 +298,46 @@ class OntologyAnalyzer:
         return cls.properties if cls else []
     
     def get_datatype_properties(self, class_uri: Optional[URIRef] = None) -> List[OntologyProperty]:
-        """Get all datatype properties, optionally filtered by class domain."""
+        """Get all datatype properties, optionally filtered by class domain.
+        
+        If class_uri is provided, includes properties from the class and all its parent classes.
+        """
         props = [p for p in self.properties.values() if not p.is_object_property]
         if class_uri:
-            props = [p for p in props if p.domain == class_uri]
+            # Get all parent classes (including the class itself)
+            parent_classes = self._get_class_ancestors(class_uri)
+            # Include properties whose domain is this class or any parent class
+            props = [p for p in props if p.domain in parent_classes]
         return props
     
     def get_object_properties(self, class_uri: Optional[URIRef] = None) -> List[OntologyProperty]:
-        """Get all object properties, optionally filtered by class domain."""
+        """Get all object properties, optionally filtered by class domain.
+        
+        If class_uri is provided, includes properties from the class and all its parent classes.
+        """
         props = [p for p in self.properties.values() if p.is_object_property]
         if class_uri:
-            props = [p for p in props if p.domain == class_uri]
+            # Get all parent classes (including the class itself)
+            parent_classes = self._get_class_ancestors(class_uri)
+            # Include properties whose domain is this class or any parent class
+            props = [p for p in props if p.domain in parent_classes]
         return props
+    
+    def _get_class_ancestors(self, class_uri: URIRef) -> set:
+        """Get all ancestor classes (parents, grandparents, etc.) including the class itself."""
+        ancestors = {class_uri}
+        to_process = [class_uri]
+        
+        while to_process:
+            current = to_process.pop()
+            # Find parent classes via rdfs:subClassOf
+            for parent in self.graph.objects(current, RDFS.subClassOf):
+                parent_uri = URIRef(str(parent))
+                if parent_uri not in ancestors and parent_uri in self.classes:
+                    ancestors.add(parent_uri)
+                    to_process.append(parent_uri)
+        
+        return ancestors
     
     def suggest_class_for_name(self, name: str) -> List[OntologyClass]:
         """

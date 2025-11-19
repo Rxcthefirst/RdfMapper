@@ -1,10 +1,11 @@
 """Semantic Model Data Mapper - Convert spreadsheet data to RDF triples."""
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"  # Bumped for simplified matcher pipeline
 
 # Export main classes and functions for easy access
 from .generator.matchers import (
     create_default_pipeline,
+    create_simplified_pipeline,  # NEW: Simplified high-performance pipeline
     create_exact_only_pipeline,
     create_fast_pipeline,
     create_custom_pipeline,
@@ -15,6 +16,7 @@ from .generator.matchers import (
 __all__ = [
     "__version__",
     "create_default_pipeline",
+    "create_simplified_pipeline",  # NEW
     "create_exact_only_pipeline",
     "create_fast_pipeline",
     "create_custom_pipeline",

@@ -5,7 +5,8 @@ from .base import (
     MatcherPipeline,
     MatchResult,
     MatchContext,
-    MatchPriority
+    MatchPriority,
+    PerformanceMetrics
 )
 from .exact_matchers import (
     ExactPrefLabelMatcher,
@@ -15,6 +16,7 @@ from .exact_matchers import (
     ExactLocalNameMatcher
 )
 from .semantic_matcher import SemanticSimilarityMatcher
+from .lexical_matcher import LexicalMatcher
 from .datatype_matcher import DataTypeInferenceMatcher
 from .history_matcher import HistoryAwareMatcher
 from .structural_matcher import StructuralMatcher
@@ -24,6 +26,7 @@ from .owl_characteristics_matcher import OWLCharacteristicsMatcher
 from .graph_matcher import GraphReasoningMatcher, InheritanceAwareMatcher, GraphContextMatcher
 from .factory import (
     create_default_pipeline,
+    create_simplified_pipeline,  # NEW: Simplified high-performance pipeline
     create_exact_only_pipeline,
     create_fast_pipeline,
     create_semantic_only_pipeline,
@@ -39,6 +42,7 @@ __all__ = [
     'MatchResult',
     'MatchContext',
     'MatchPriority',
+    'PerformanceMetrics',
 
     # Exact matchers
     'ExactPrefLabelMatcher',
@@ -49,6 +53,8 @@ __all__ = [
 
     # Advanced matchers
     'SemanticSimilarityMatcher',
+    'LexicalMatcher',
+    'DataTypeInferenceMatcher',
     'HistoryAwareMatcher',
     'StructuralMatcher',
     'DataTypeInferenceMatcher',

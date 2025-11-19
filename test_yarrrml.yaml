@@ -1,0 +1,29 @@
+prefixes:
+  ex: https://example.com/hr#
+  xsd: http://www.w3.org/2001/XMLSchema#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+
+base: https://data.example.com/
+
+sources:
+  employees:
+    - ['examples/comprehensive_test/employees.csv~csv']
+
+mappings:
+  person:
+    sources: $employees
+    s: https://data.example.com/person/$(EmployeeID)
+    po:
+      - [a, ex:Person]
+      - [ex:firstName, $(First Name), xsd:string]
+      - [ex:name, $(name), xsd:string]
+      - [ex:email, $(ContactEmail), xsd:string]
+      - [ex:age, $(Age), xsd:integer]
+      - [ex:salary, $(salary), xsd:decimal]
+
+x-alignment:
+  generated_at: "2025-11-18T00:00:00Z"
+  statistics:
+    total_columns: 47
+    mapped_columns: 4
+    mapping_success_rate: 0.085

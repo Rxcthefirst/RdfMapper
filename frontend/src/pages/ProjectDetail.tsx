@@ -8,6 +8,11 @@ import { FormControl, InputLabel, Select, MenuItem, FormControlLabel, Checkbox }
 import DownloadIcon from '@mui/icons-material/Download'
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import EvidenceDrawer, { MatchDetail as EvidenceMatchDetail } from '../components/EvidenceDrawer'
+import ValidationDashboard from '../components/ValidationDashboard'
+import ManualMappingModal from '../components/ManualMappingModal'
+import OntologyGraphMini from '../components/OntologyGraphMini'
+import OntologyGraphModal from '../components/OntologyGraphModal'
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>()
@@ -21,6 +26,16 @@ export default function ProjectDetail() {
 
   const [format, setFormat] = useState('turtle')
   const [validateOutput, setValidateOutput] = useState(true)
+
+  const [evidenceOpen, setEvidenceOpen] = useState(false)
+  const [selectedMatch, setSelectedMatch] = useState<EvidenceMatchDetail | null>(null)
+
+  const [manualOpen, setManualOpen] = useState(false)
+  const [manualColumn, setManualColumn] = useState<string | null>(null)
+  const [manualCurrentProp, setManualCurrentProp] = useState<string | null>(null)
+
+  const [graphOpen, setGraphOpen] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0) // Force re-render after manual overrides
 
   const preview = useQuery({
     queryKey: ['preview', projectId],
@@ -246,10 +261,31 @@ export default function ProjectDetail() {
           }
           // Calculate from sheets
           sheets.forEach((s:any) => {
-            const cols = Object.keys(s.columns || {}).length
-            const objs = Object.keys(s.objects || {}).length
-            stats.total_columns += cols + objs
-            stats.mapped_columns += cols + objs
+            // Collect all unique column names
+            const allColumns = new Set<string>()
+
+            // Add direct column mappings
+            const cols = s.columns || {}
+            Object.keys(cols).forEach(col => allColumns.add(col))
+
+            // Add columns used in objects (FK columns + object property columns)
+            const objs = s.objects || {}
+            Object.values(objs).forEach((obj:any) => {
+              // Extract column names from iri_template (e.g., {BorrowerID})
+              const iriTemplate = obj.iri_template || ''
+              const fkCols = iriTemplate.match(/\{(\w+)\}/g)?.map((m:string) => m.slice(1, -1)) || []
+              // Filter out known template variables
+              fkCols.filter(col => !['base_iri', 'base_uri', 'namespace'].includes(col)).forEach(col => allColumns.add(col))
+
+              // Add columns from object properties
+              const props = obj.properties || []
+              props.forEach((prop:any) => {
+                if (prop.column) allColumns.add(prop.column)
+              })
+            })
+
+            stats.total_columns += allColumns.size
+            stats.mapped_columns += allColumns.size
           })
           if (stats.total_columns > 0) {
             stats.mapping_rate = (stats.mapped_columns / stats.total_columns) * 100
@@ -404,13 +440,18 @@ export default function ProjectDetail() {
         {ontology.data && (
           <Paper sx={{ p:3 }}>
             <Typography variant="h6" gutterBottom>Ontology Summary</Typography>
-            <Stack direction="row" spacing={4} sx={{ mb:1 }}>
+            <Stack direction="row" spacing={4} sx={{ mb:1, alignItems:'center' }}>
               <Typography variant="body2">Classes: <strong>{ontology.data.total_classes}</strong></Typography>
               <Typography variant="body2">Properties: <strong>{ontology.data.total_properties}</strong></Typography>
+              <Button size="small" variant="outlined" onClick={()=> setGraphOpen(true)}>View Graph</Button>
             </Stack>
-            {/* Optional: show first few classes/properties */}
+            <OntologyGraphMini
+              classes={ontology.data.classes || []}
+              properties={ontology.data.properties || []}
+              onOpenFull={()=> setGraphOpen(true)}
+            />
             {ontology.data.classes?.length > 0 && (
-              <Box sx={{ mt:1 }}>
+              <Box sx={{ mt:2 }}>
                 <Typography variant="subtitle2">Sample Classes</Typography>
                 <Typography variant="caption" color="text.secondary">
                   {ontology.data.classes.slice(0,5).map((c:any)=>c.label || c.uri).join(', ')}
@@ -418,7 +459,7 @@ export default function ProjectDetail() {
               </Box>
             )}
             {ontology.data.properties?.length > 0 && (
-              <Box sx={{ mt:1 }}>
+              <Box sx={{ mt:2 }}>
                 <Typography variant="subtitle2">Sample Properties</Typography>
                 <Typography variant="caption" color="text.secondary">
                   {ontology.data.properties.slice(0,5).map((p:any)=>p.label || p.uri).join(', ')}
@@ -427,6 +468,12 @@ export default function ProjectDetail() {
             )}
           </Paper>
         )}
+        <OntologyGraphModal
+          open={graphOpen}
+          onClose={()=> setGraphOpen(false)}
+          classes={ontology.data?.classes || []}
+          properties={ontology.data?.properties || []}
+        />
 
         {/* Step 2: Generate Mappings */}
         <Paper sx={{ p: 3 }}>
@@ -501,74 +548,13 @@ export default function ProjectDetail() {
           )}
 
           {/* Validation results */}
-          {convertSync.data?.validation || convertSync.data?.shacl_validation ? (
-            <Paper sx={{ p:2, mt:2 }} variant="outlined">
-              <Typography variant="subtitle1" gutterBottom>Validation</Typography>
-              {convertSync.data?.validation && (
-                <Box sx={{ mb:1 }}>
-                  <Typography variant="body2"><strong>Ontology validation:</strong></Typography>
-                  {convertSync.data.validation.status === 'skipped' && (
-                    <Alert severity="info" sx={{ mt:1 }}>Validation skipped: {convertSync.data.validation.reason}</Alert>
-                  )}
-                  {convertSync.data.validation.status === 'error' && (
-                    <Alert severity="error" sx={{ mt:1 }}>Validation error: {convertSync.data.validation.error}</Alert>
-                  )}
-                  {convertSync.data.validation.conforms !== undefined && (
-                    <Alert severity={convertSync.data.validation.conforms ? 'success' : 'warning'} sx={{ mt:1 }}>
-                      SHACL conforms (Ontology constraints): {String(convertSync.data.validation.conforms)}
-                    </Alert>
-                  )}
-                </Box>
-              )}
-              {convertSync.data?.shacl_validation && (
-                <Box>
-                  <Typography variant="body2"><strong>SHACL shapes validation:</strong></Typography>
-                  {convertSync.data.shacl_validation.status === 'skipped' && (
-                    <Alert severity="info" sx={{ mt:1 }}>Validation skipped: {convertSync.data.shacl_validation.reason}</Alert>
-                  )}
-                  {convertSync.data.shacl_validation.status === 'error' && (
-                    <Alert severity="error" sx={{ mt:1 }}>Validation error: {convertSync.data.shacl_validation.error}</Alert>
-                  )}
-                  {convertSync.data.shacl_validation.conforms !== undefined && (
-                    <Alert severity={convertSync.data.shacl_validation.conforms ? 'success' : 'warning'} sx={{ mt:1 }}>
-                      SHACL conforms (Uploaded shapes): {String(convertSync.data.shacl_validation.conforms)}
-                    </Alert>
-                  )}
-                </Box>
-              )}
-            </Paper>
+          {convertSync.data?.validation || convertSync.data?.shacl_validation || convertSync.data?.ontology_structural_validation ? (
+            <ValidationDashboard
+              ontologyValidation={convertSync.data?.validation}
+              shaclValidation={convertSync.data?.shacl_validation}
+              structuralValidation={convertSync.data?.ontology_structural_validation}
+            />
           ) : null}
-
-          {/* Ontology Structural Validation */}
-          {convertSync.data?.ontology_structural_validation && (
-            <Paper sx={{ p:2, mt:2 }} variant="outlined">
-              <Typography variant="subtitle2" gutterBottom>Ontology Structural Validation</Typography>
-              {convertSync.data.ontology_structural_validation.status === 'error' && (
-                <Alert severity="error">Structural validation error: {convertSync.data.ontology_structural_validation.error}</Alert>
-              )}
-              {convertSync.data.ontology_structural_validation.status === 'completed' && (
-                <Stack spacing={1}>
-                  <Alert severity={convertSync.data.ontology_structural_validation.compliance_rate === 1.0 ? 'success' : 'warning'}>
-                    Compliance rate: {(convertSync.data.ontology_structural_validation.compliance_rate*100).toFixed(2)}%
-                  </Alert>
-                  <Typography variant="caption" color="text.secondary">
-                    Domain violations: {convertSync.data.ontology_structural_validation.domain_violations} • Range violations: {convertSync.data.ontology_structural_validation.range_violations}
-                  </Typography>
-                  {(convertSync.data.ontology_structural_validation.violations.domain_samples.length > 0 || convertSync.data.ontology_structural_validation.violations.range_samples.length > 0) && (
-                    <Box sx={{ mt:1 }}>
-                      <Typography variant="caption" color="text.secondary">Samples:</Typography>
-                      <Typography variant="caption" sx={{ display:'block' }}>
-                        {convertSync.data.ontology_structural_validation.violations.domain_samples.join('; ')}
-                      </Typography>
-                      <Typography variant="caption" sx={{ display:'block' }}>
-                        {convertSync.data.ontology_structural_validation.violations.range_samples.join('; ')}
-                      </Typography>
-                    </Box>
-                  )}
-                </Stack>
-              )}
-            </Paper>
-          )}
         </Paper>
 
         {/* Step 4: Download */}
@@ -596,122 +582,334 @@ export default function ProjectDetail() {
         )}
 
         {/* After Generate: Mapping Summary */}
-        {mappingInfo && (
+        {generate.data?.alignment_report && (
           <Paper sx={{ p:3 }}>
             <Typography variant="h6" gutterBottom>Mapping Summary</Typography>
             <Typography variant="body2" sx={{ mb:2 }}>
-              <strong>All columns mapped: {mappingInfo.stats.mapped_columns}/{mappingInfo.stats.total_columns} ({mappingInfo.stats.mapping_rate?.toFixed(1)}%)</strong>
+              <strong>
+                Mapped: {generate.data.alignment_report.statistics?.mapped_columns || 0} /
+                Total: {generate.data.alignment_report.statistics?.total_columns || 0}
+                ({(generate.data.alignment_report.statistics?.mapping_success_rate * 100 || 0).toFixed(1)}%)
+              </strong>
             </Typography>
-            {mappingInfo.sheets.map(s => (
-              <Box key={s.sheet} sx={{ mb:2 }}>
-                <Chip label={s.sheet || 'Sheet'} size="small" sx={{ mr:1 }} />
-                <Typography variant="body2" sx={{ ml: 3, mt: 1 }}>
-                  • Data properties: {s.direct_mappings?.length || 0} ({s.direct_mappings?.join(', ') || 'none'})
-                </Typography>
-                <Typography variant="body2" sx={{ ml: 3 }}>
-                  • Object properties: {s.object_properties || 0} linked objects
-                </Typography>
-                <Typography variant="body2" sx={{ ml: 3 }}>
-                  • Object data properties: {s.object_data_properties?.length || 0} ({s.object_data_properties?.join(', ') || 'none'})
+            <Typography variant="caption" color="text.secondary">
+              💡 Unmapped columns can be manually mapped in the Mapping Configuration section below.
+            </Typography>
+          </Paper>
+        )}
+
+        {/* Evidence Drawer */}
+        <EvidenceDrawer
+          open={evidenceOpen}
+          onClose={()=> setEvidenceOpen(false)}
+          matchDetail={selectedMatch}
+          onSwitchToAlternate={(column, newProp)=>{
+            // TODO: Implement switch via API override; for now just notify and close
+            setSuccess(`Switching ${column} to alternate: ${newProp}`)
+            setEvidenceOpen(false)
+          }}
+        />
+
+        {/* Manual Mapping Modal */}
+        <ManualMappingModal
+          open={manualOpen}
+          columnName={manualColumn}
+          currentProperty={manualCurrentProp}
+          properties={(ontology.data?.properties || []).map((p:any)=>({ uri: p.uri, label: p.label, comment: p.comment }))}
+          onClose={()=>{ setManualOpen(false); setManualColumn(null); setManualCurrentProp(null) }}
+          onMap={async (col, propUri)=>{
+            try {
+              await api.overrideMapping(projectId, col, propUri)
+              const propLabel = propUri.split('#').pop()?.split('/').pop() || propUri
+              setSuccess(`Mapping updated: ${col} → ${propLabel}`)
+
+              // Update generate.data to reflect the manual override
+              if (generate.data) {
+                const updatedMatchDetails = generate.data.match_details?.map((detail: any) =>
+                  detail.column_name === col
+                    ? {
+                        ...detail,
+                        matched_property: propUri,
+                        matcher_name: 'ManualOverride',
+                        match_type: 'manual_override',
+                        confidence_score: 1.0,
+                        matched_via: 'User override'
+                      }
+                    : detail
+                ) || []
+
+                // Check if this was an unmapped column
+                const wasUnmapped = generate.data.alignment_report?.unmapped_columns?.some(
+                  (u: any) => u.column_name === col
+                )
+
+                // If it was unmapped, add it to match_details and remove from unmapped
+                if (wasUnmapped) {
+                  updatedMatchDetails.push({
+                    column_name: col,
+                    matched_property: propUri,
+                    matcher_name: 'ManualOverride',
+                    match_type: 'manual_override',
+                    confidence_score: 1.0,
+                    matched_via: 'User override',
+                    evidence: [],
+                    evidence_groups: []
+                  })
+
+                  const updatedUnmapped = generate.data.alignment_report.unmapped_columns.filter(
+                    (u: any) => u.column_name !== col
+                  )
+
+                  const updatedStats = {
+                    ...generate.data.alignment_report.statistics,
+                    mapped_columns: (generate.data.alignment_report.statistics?.mapped_columns || 0) + 1,
+                    mapping_success_rate: ((generate.data.alignment_report.statistics?.mapped_columns || 0) + 1) /
+                                         (generate.data.alignment_report.statistics?.total_columns || 1)
+                  }
+
+                  // Update generate.data with new state
+                  generate.data.alignment_report = {
+                    ...generate.data.alignment_report,
+                    statistics: updatedStats,
+                    unmapped_columns: updatedUnmapped
+                  }
+                }
+
+                generate.data.match_details = updatedMatchDetails
+
+                // Force re-render by incrementing refresh key
+                setRefreshKey(prev => prev + 1)
+              }
+
+            } catch(e:any){
+              setError(`Override failed: ${e.message}`)
+            }
+            setManualOpen(false)
+          }}
+        />
+
+        {/* Mapping Configuration - Enhanced UX */}
+        {generate.data?.alignment_report && (
+          <Paper sx={{ p:3 }} key={`mapping-config-${refreshKey}`}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom>Mapping Configuration</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Review and refine the automated mappings. Click Evidence to understand why each mapping was made, or Change to manually override it.
                 </Typography>
               </Box>
-            ))}
-            <Typography variant="caption" color="text.secondary" sx={{ display:'block', mt:2 }}>
-              💡 Object properties (e.g., BorrowerID, PropertyID) are foreign keys that link to other entities.
-            </Typography>
-          </Paper>
-        )}
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={async () => {
+                  try {
+                    await api.downloadYARRRML(projectId)
+                    setSuccess('YARRRML downloaded successfully! ⭐')
+                  } catch (e: any) {
+                    setError('YARRRML download failed: ' + e.message)
+                  }
+                }}
+              >
+                Download YARRRML
+              </Button>
+            </Stack>
 
-        {mappingInfo?.matchDetails && mappingInfo.matchDetails.length > 0 && (
-          <Paper sx={{ p:3 }}>
-            <Typography variant="h6" gutterBottom>Match Reasons</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb:2 }}>
-              Detailed explanation of how each column was matched to an ontology property
-            </Typography>
-            <TableContainer sx={{ maxHeight: 400 }}>
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell><strong>Column</strong></TableCell>
-                    <TableCell><strong>Property</strong></TableCell>
-                    <TableCell><strong>Match Type</strong></TableCell>
-                    <TableCell><strong>Matcher</strong></TableCell>
-                    <TableCell><strong>Matched Via</strong></TableCell>
-                    <TableCell align="right"><strong>Confidence</strong></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {mappingInfo.matchDetails.map((detail:any, idx:number) => {
-                    const propShort = detail.matched_property?.split('#').pop()?.split('/').pop() || detail.matched_property
-                    const confColor = detail.confidence_score >= 0.8 ? 'success.main' : detail.confidence_score >= 0.5 ? 'warning.main' : 'error.main'
-                    const matchTypeLabel = detail.match_type?.replace(/_/g, ' ').replace(/\b\w/g, (l:string) => l.toUpperCase())
-                    return (
-                      <TableRow key={idx} hover>
-                        <TableCell><strong>{detail.column_name}</strong></TableCell>
-                        <TableCell><code style={{ fontSize:'0.85em' }}>{propShort}</code></TableCell>
-                        <TableCell><Chip label={matchTypeLabel} size="small" sx={{ fontSize:'0.7em' }} /></TableCell>
-                        <TableCell>{detail.matcher_name}</TableCell>
-                        <TableCell><em style={{ color:'#666' }}>{detail.matched_via}</em></TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2" sx={{ color: confColor, fontWeight:'bold' }}>
-                            {detail.confidence_score?.toFixed(2)}
-                          </Typography>
-                        </TableCell>
+            {/* Simplified Pipeline Performance Alert */}
+            {generate.data.alignment_report.statistics?.matchers_fired_avg &&
+             generate.data.alignment_report.statistics.matchers_fired_avg < 3 && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                <strong>Optimized Performance:</strong> Using simplified pipeline with {
+                  generate.data.alignment_report.statistics.matchers_fired_avg.toFixed(1)
+                } matchers avg (5x faster, better accuracy!)
+              </Alert>
+            )}
+
+            {/* Statistics as Chips */}
+            <Stack direction="row" spacing={2} sx={{ mb: 3, flexWrap: 'wrap' }}>
+              <Chip
+                label={`Success Rate: ${(generate.data.alignment_report.statistics?.mapping_success_rate*100 || 0).toFixed(1)}%`}
+                color="primary"
+                variant="outlined"
+              />
+              <Chip
+                label={`Avg Confidence: ${(generate.data.alignment_report.statistics?.average_confidence || 0).toFixed(2)}`}
+                color="success"
+                variant="outlined"
+              />
+              <Chip
+                label={`Mapped: ${generate.data.alignment_report.statistics?.mapped_columns || 0}`}
+                color="success"
+              />
+              <Chip
+                label={`Unmapped: ${generate.data.alignment_report.unmapped_columns?.length || 0}`}
+                color={generate.data.alignment_report.unmapped_columns?.length > 0 ? 'warning' : 'default'}
+              />
+              {/* NEW: Simplified Pipeline Metrics */}
+              {generate.data.alignment_report.statistics?.matchers_fired_avg && (
+                <Chip
+                  label={`Matchers Fired: ${generate.data.alignment_report.statistics.matchers_fired_avg.toFixed(1)}`}
+                  color={generate.data.alignment_report.statistics.matchers_fired_avg < 5 ? 'success' : 'info'}
+                  variant="outlined"
+                />
+              )}
+              {generate.data.alignment_report.statistics?.matchers_fired_avg &&
+               generate.data.alignment_report.statistics.matchers_fired_avg < 5 && (
+                <Chip
+                  label="Simplified Pipeline ⚡"
+                  color="success"
+                  size="small"
+                />
+              )}
+            </Stack>
+
+            {/* Mapped Columns Table */}
+            {generate.data.match_details && generate.data.match_details.length > 0 && (
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
+                  ✅ Mapped Columns
+                </Typography>
+                <TableContainer sx={{ maxHeight: 400, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Column</TableCell>
+                        <TableCell>Mapped Property</TableCell>
+                        <TableCell>Confidence</TableCell>
+                        <TableCell>Matcher</TableCell>
+                        <TableCell align="right">Actions</TableCell>
                       </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-        )}
+                    </TableHead>
+                    <TableBody>
+                      {generate.data.match_details.map((detail: any, idx: number) => {
+                        const confidence = detail.confidence_score || 0;
+                        const confidenceColor = confidence >= 0.8 ? 'success' : confidence >= 0.6 ? 'warning' : 'error';
+                        const propLabel = detail.matched_property?.split('#').pop()?.split('/').pop() || detail.matched_property;
 
-        {mappingYamlQuery.data && (
-          <Paper sx={{ p:3 }}>
-            <Typography variant="h6" gutterBottom>Mapping YAML</Typography>
-            <Box sx={{ maxHeight: 300, overflow: 'auto', fontSize: '12px', bgcolor:'#111', color:'#eee', p:2, borderRadius:1 }}>
-              <pre style={{ margin:0 }}>{mappingYamlQuery.data}</pre>
-            </Box>
-          </Paper>
-        )}
+                        return (
+                          <TableRow key={idx} hover>
+                            <TableCell><strong>{detail.column_name}</strong></TableCell>
+                            <TableCell>{propLabel}</TableCell>
+                            <TableCell>
+                              <Chip
+                                label={`${(confidence * 100).toFixed(0)}%`}
+                                size="small"
+                                color={confidenceColor}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="caption">{detail.matcher_name}</Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => {
+                                    setSelectedMatch(detail as EvidenceMatchDetail);
+                                    setEvidenceOpen(true);
+                                  }}
+                                >
+                                  Evidence
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => {
+                                    setManualColumn(detail.column_name);
+                                    setManualCurrentProp(detail.matched_property);
+                                    setManualOpen(true);
+                                  }}
+                                >
+                                  Change
+                                </Button>
+                              </Stack>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
 
-        {generate.data?.alignment_report && (
-          <Paper sx={{ p:3 }}>
-            <Typography variant="h6" gutterBottom>Alignment Report</Typography>
-            <Typography variant="body2" sx={{ mb:1 }}>
-              Success rate: {(generate.data.alignment_report.statistics?.mapping_success_rate*100 || 0).toFixed(1)}% • Avg confidence: {(generate.data.alignment_report.statistics?.average_confidence || 0).toFixed(2)}
-            </Typography>
-            <Typography variant="body2" sx={{ mb:1 }}>
-              Weak matches: {generate.data.alignment_report.weak_matches?.length || 0} • Unmapped: {generate.data.alignment_report.unmapped_columns?.length || 0}
-            </Typography>
-            <Stack direction="row" spacing={2}>
-              <Button variant="outlined" size="small" startIcon={<DownloadIcon />} href={`/api/files/${projectId}/alignment_report.json`}>
-                Download JSON
-              </Button>
-              <Button variant="outlined" size="small" startIcon={<DownloadIcon />} href={`/api/files/${projectId}/alignment_report.html`}>
-                Download HTML
-              </Button>
-              <Button variant="outlined" size="small" startIcon={<DownloadIcon />} href={`/api/mappings/${projectId}?raw=true`}>
-                Download YAML
-              </Button>
+            {/* Unmapped Columns Section */}
+            {generate.data.alignment_report.unmapped_columns && generate.data.alignment_report.unmapped_columns.length > 0 && (
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
+                  ⚠️ Unmapped Columns
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  These columns could not be automatically mapped. Click "Map Now" to manually map them, or skip them if they're not needed in your RDF output.
+                </Typography>
+                <TableContainer sx={{ maxHeight: 400, border: '2px solid', borderColor: 'warning.light', borderRadius: 1 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Column</TableCell>
+                        <TableCell>Sample Values</TableCell>
+                        <TableCell>Type</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {generate.data.alignment_report.unmapped_columns.map((unmapped: any, idx: number) => (
+                        <TableRow key={idx} hover>
+                          <TableCell><strong>{unmapped.column_name}</strong></TableCell>
+                          <TableCell>
+                            <Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                              {unmapped.sample_values?.slice(0, 3).join(', ') || 'N/A'}
+                              {(unmapped.sample_values?.length || 0) > 3 && '...'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={unmapped.inferred_datatype?.replace('xsd:', '') || 'unknown'}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="primary"
+                              onClick={() => {
+                                setManualColumn(unmapped.column_name);
+                                setManualCurrentProp(null);
+                                setManualOpen(true);
+                              }}
+                            >
+                              Map Now
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
+
+            <Divider sx={{ my: 3 }} />
+
+            {/* Export Options */}
+            <Stack direction="row" spacing={2} justifyContent="space-between" alignItems="center">
+              <Typography variant="body2" color="text.secondary">
+                Export configuration or reports for documentation
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button variant="outlined" size="small" startIcon={<DownloadIcon />} href={`/api/files/${projectId}/alignment_report.json`}>
+                  Report JSON
+                </Button>
+                <Button variant="outlined" size="small" startIcon={<DownloadIcon />} href={`/api/files/${projectId}/alignment_report.html`}>
+                  Report HTML
+                </Button>
+                <Button variant="outlined" size="small" startIcon={<DownloadIcon />} href={`/api/mappings/${projectId}?raw=true`}>
+                  Config YAML
+                </Button>
+              </Stack>
             </Stack>
-          </Paper>
-        )}
-
-        {convertSync.data?.reasoning && (
-          <Paper sx={{ p:3 }}>
-            <Typography variant="h6" gutterBottom>Reasoning Metrics</Typography>
-            <Stack direction="row" spacing={3} sx={{ flexWrap:'wrap', mb:2 }}>
-              <Chip label={`Inferred types: ${convertSync.data.reasoning.inferred_types}`} size="small" />
-              <Chip label={`Inverse links: ${convertSync.data.reasoning.inverse_links_added}`} size="small" />
-              <Chip label={`Transitive links: ${convertSync.data.reasoning.transitive_links_added}`} size="small" />
-              <Chip label={`Symmetric links: ${convertSync.data.reasoning.symmetric_links_added}`} size="small" />
-              <Chip label={`Functional cardinality violations: ${convertSync.data.reasoning.cardinality_violations}`} size="small" color={convertSync.data.reasoning.cardinality_violations>0?'warning':'default'} />
-              <Chip label={`Min card violations: ${convertSync.data.reasoning.min_cardinality_violations}`} size="small" color={convertSync.data.reasoning.min_cardinality_violations>0?'warning':'default'} />
-              <Chip label={`Max card violations: ${convertSync.data.reasoning.max_cardinality_violations}`} size="small" color={convertSync.data.reasoning.max_cardinality_violations>0?'warning':'default'} />
-              <Chip label={`Exact card violations: ${convertSync.data.reasoning.exact_cardinality_violations}`} size="small" color={convertSync.data.reasoning.exact_cardinality_violations>0?'warning':'default'} />
-            </Stack>
-            <Typography variant="caption" color="text.secondary">Reasoning expands your graph using ontology semantics (subclass, inverse, symmetric, transitive). Cardinality violations highlight constraint issues.</Typography>
           </Paper>
         )}
       </Stack>

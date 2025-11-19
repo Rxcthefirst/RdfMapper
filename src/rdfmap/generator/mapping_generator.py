@@ -3,7 +3,6 @@
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 import os
-import yaml
 import json
 from difflib import SequenceMatcher
 from pydantic import BaseModel, Field
@@ -19,7 +18,6 @@ from ..models.alignment import (
     WeakMatch,
     SKOSEnrichmentSuggestion,
     MatchType,
-    calculate_confidence_score,
     get_confidence_level,
 )
 
@@ -71,9 +69,13 @@ class MappingGenerator:
         if matcher_pipeline:
             self.matcher_pipeline = matcher_pipeline
         else:
+            # Use simplified pipeline by default for better results
             self.matcher_pipeline = create_default_pipeline(
                 use_semantic=use_semantic_matching,
-                semantic_threshold=config.min_confidence
+                semantic_threshold=config.min_confidence,
+                use_simplified=True,  # NEW DEFAULT: Simplified pipeline
+                ontology_analyzer=self.ontology,
+                enable_logging=False
             )
         self.semantic_matcher = SemanticMatcher() if use_semantic_matching else None
 
@@ -83,7 +85,8 @@ class MappingGenerator:
         # Tracking for alignment report
         self._mapped_columns: Dict[str, Tuple[OntologyProperty, MatchType, float]] = {}
         self._unmapped_columns: List[str] = []
-    
+        self._match_extras: Dict[str, Dict[str, Any]] = {}  # evidence/alternates/adjustments per column
+
     def generate(
         self,
         target_class: Optional[str] = None,
@@ -122,7 +125,8 @@ class MappingGenerator:
         
         # Add imports if specified
         if self.config.imports:
-            self.mapping["imports"] = self.config.imports
+            # Ensure imports is captured at top-level mapping (list of strings)
+            self.mapping["imports"] = list(self.config.imports)
 
         return self.mapping
     
@@ -256,16 +260,14 @@ class MappingGenerator:
         outgoing_rels = [r for r in relationships if r.source_sheet == sheet_name]
 
         if outgoing_rels:
-            # Add relationship hints
-            sheet_mapping["_relationships"] = [
-                {
-                    "target_sheet": rel.target_sheet,
+            # Store as metadata dict rather than list to satisfy typing
+            sheet_mapping.setdefault("_relationships", {})
+            for rel in outgoing_rels:
+                sheet_mapping["_relationships"][rel.target_sheet] = {
                     "foreign_key": rel.source_column,
                     "referenced_key": rel.target_column,
-                    "type": rel.relationship_type
+                    "type": rel.relationship_type,
                 }
-                for rel in outgoing_rels
-            ]
 
         # For now, generate basic column mappings
         # (Full implementation would load sheet data and match columns)
@@ -377,10 +379,9 @@ class MappingGenerator:
                 "iri_template": iri_template,
             },
             "columns": column_mappings,
+            "objects": object_mappings or {},
+            "_options": self._generate_options(),
         }
-
-        if object_mappings:
-            sheet["objects"] = object_mappings
 
         return sheet
 
@@ -462,9 +463,9 @@ class MappingGenerator:
             match_result = self._match_column_to_property(col_name, col_analysis, properties)
             
             if match_result:
-                matched_prop, match_type, matched_via = match_result
-                confidence = calculate_confidence_score(match_type)
-                
+                matched_prop, match_type, matched_via, confidence = match_result
+                # Use actual confidence from matcher, not legacy calculation
+
                 # Track for alignment report
                 self._mapped_columns[col_name] = (matched_prop, match_type, confidence)
                 
@@ -491,32 +492,276 @@ class MappingGenerator:
         
         return mappings
 
+    def _aggregate_matches(
+        self,
+        col_analysis: DataFieldAnalysis,
+        properties: List[OntologyProperty],
+        context: MatchContext,
+        top_k: int = 5,
+        col_name: Optional[str] = None,
+    ) -> Optional[Tuple[OntologyProperty, MatchType, str, float]]:
+        """Aggregate evidence across matchers and compute a combined confidence.
+
+        Strategy:
+        - Collect top results from all matchers (no early exit) - PARALLEL EXECUTION!
+        - Group by property URI and build evidence lists
+        - Base score: prefer exact tiers (pref/label/alt/hidden/local) else semantic
+        - Boosters: +0.05 for DATA_TYPE_COMPATIBILITY, +0.05 for GRAPH_REASONING, +0.02 for INHERITED_PROPERTY (cap 0.15)
+        - Ambiguity penalty: if ≥2 candidates within 0.10 of top base, subtract 0.05–0.10
+        - Clamp [0.15, 1.0]
+        """
+        # Gather evidence - USE PARALLEL EXECUTION for blazingly fast performance!
+        results = self.matcher_pipeline.match_all(
+            col_analysis,
+            properties,
+            context,
+            top_k=top_k,
+            parallel=True  # Enable parallel execution
+        )
+
+        # Get performance metrics
+        perf_metrics = self.matcher_pipeline.get_last_performance_metrics()
+        if not results:
+            return None
+
+        # Group by property
+        grouped: Dict[str, Dict[str, any]] = {}
+        for r in results:
+            key = str(r.property.uri)
+            if key not in grouped:
+                grouped[key] = {
+                    'prop': r.property,
+                    'evidence': []
+                }
+            grouped[key]['evidence'].append(r)
+
+        # Build evidence serializable snapshot
+        evidence_snapshot: Dict[str, List[Dict[str, Any]]] = {}
+        for uri, info in grouped.items():
+            evs = []
+            for e in info['evidence']:
+                evs.append({
+                    'matcher_name': e.matcher_name,
+                    'match_type': e.match_type.value,
+                    'confidence': float(e.confidence),
+                    'matched_via': e.matched_via,
+                })
+            evidence_snapshot[uri] = evs
+
+        def is_exact(mt: MatchType) -> bool:
+            return mt in (
+                MatchType.EXACT_PREF_LABEL,
+                MatchType.EXACT_LABEL,
+                MatchType.EXACT_ALT_LABEL,
+                MatchType.EXACT_HIDDEN_LABEL,
+                MatchType.EXACT_LOCAL_NAME,
+            )
+
+        def is_dtype(mt: MatchType) -> bool:
+            return mt == MatchType.DATA_TYPE_COMPATIBILITY
+
+        # Compute combined scores per property
+        combined_scores: List[Tuple[str, float, MatchType, str, float]] = []  # (uri, final, base_type, matched_via, booster)
+        for uri, info in grouped.items():
+            evs: List = info['evidence']
+            # Base: prefer highest exact, else highest semantic, else highest of others (excluding dtype-only)
+            base_result = None
+            exact_evs = [e for e in evs if is_exact(e.match_type)]
+            if exact_evs:
+                base_result = max(exact_evs, key=lambda e: e.confidence)
+            else:
+                sem_evs = [e for e in evs if e.match_type == MatchType.SEMANTIC_SIMILARITY]
+                if sem_evs:
+                    base_result = max(sem_evs, key=lambda e: e.confidence)
+                else:
+                    non_dtype = [e for e in evs if not is_dtype(e.match_type)]
+                    if non_dtype:
+                        base_result = max(non_dtype, key=lambda e: e.confidence)
+                    else:
+                        # If absolutely only dtype evidence exists, treat as very weak base
+                        base_result = max(evs, key=lambda e: e.confidence)
+
+            base = float(base_result.confidence)
+            base_type = base_result.match_type
+            matched_via = base_result.matched_via
+
+            # Boosters (dtype acts only as booster)
+            booster = 0.0
+            if any(e.match_type == MatchType.DATA_TYPE_COMPATIBILITY for e in evs):
+                booster += 0.05
+            if any(e.match_type == MatchType.GRAPH_REASONING for e in evs):
+                booster += 0.05
+            if any(e.match_type == MatchType.INHERITED_PROPERTY for e in evs):
+                booster += 0.02
+            if booster > 0.15:
+                booster = 0.15
+
+            prelim = min(1.0, base + booster)
+
+            # Lexical overlap penalty when base is not exact/semantic and names disagree
+            if base_type not in (MatchType.SEMANTIC_SIMILARITY,) and not is_exact(base_type):
+                # Compute token overlap between column name and property labels
+                col_tokens = set(context.column.name.lower().replace('_',' ').split())
+                prop_text = (base_result.matched_via or str(info['prop'].label) or str(info['prop'].uri)).lower().replace('_',' ')
+                prop_tokens = set(prop_text.split())
+                overlap = len(col_tokens & prop_tokens)
+                if overlap == 0:
+                    prelim = max(0.15, prelim - 0.20)
+
+            # If base derived from dtype-only, cap overall confidence to 0.65
+            if is_dtype(base_type):
+                prelim = min(prelim, 0.65)
+
+            combined_scores.append((uri, prelim, base_type, matched_via, booster))
+
+        # Ambiguity penalty based on prelim scores proximity
+        sorted_scores = sorted(combined_scores, key=lambda t: t[1], reverse=True)
+        ambiguity_count = 0
+        penalty_applied = 0.0
+        if len(sorted_scores) >= 2:
+            top_score = sorted_scores[0][1]
+            close = [s for s in sorted_scores[1:] if (top_score - s[1]) <= 0.10]
+            ambiguity_count = len(close) + 1 if close else 1
+            if len(close) >= 2:
+                penalty_applied = 0.10
+            elif len(close) == 1:
+                penalty_applied = 0.05
+            if penalty_applied > 0.0:
+                uri, prelim, base_type, matched_via = sorted_scores[0][0:4]
+                booster = sorted_scores[0][4]
+                prelim = max(0.15, prelim - penalty_applied)
+                sorted_scores[0] = (uri, prelim, base_type, matched_via, booster)
+
+        # Choose primary
+        best_uri, final_score, base_type, matched_via, booster = max(sorted_scores, key=lambda t: t[1])
+        best_prop = grouped[best_uri]['prop']
+
+        # Prepare alternates (top 3 excluding best)
+        alternates = []
+        for uri, score, _, _, _ in sorted_scores[1:4]:
+            alternates.append({
+                'property': uri,
+                'combined_confidence': float(score),
+                'evidence_count': len(evidence_snapshot.get(uri, []))
+            })
+
+        # Save extras for later reporting with rich evidence
+        if col_name:
+            from .evidence_categorizer import categorize_evidence, generate_reasoning_summary
+            from ..models.alignment import EvidenceItem
+
+            # Convert to EvidenceItem format for categorization
+            evidence_items = [
+                EvidenceItem(
+                    matcher_name=e['matcher_name'],
+                    match_type=e['match_type'],
+                    confidence=e['confidence'],
+                    matched_via=e['matched_via']
+                )
+                for e in evidence_snapshot.get(best_uri, [])
+            ]
+
+            # Categorize evidence
+            evidence_groups = categorize_evidence(evidence_items)
+
+            # Generate reasoning summary
+            prop_label = best_prop.label or best_prop.pref_label or str(best_prop.uri).split('#')[-1]
+            reasoning_summary = generate_reasoning_summary(
+                base_result.matcher_name,
+                float(final_score),
+                evidence_groups,
+                prop_label
+            )
+
+            self._match_extras[col_name] = {
+                'evidence': evidence_snapshot.get(best_uri, []),
+                'evidence_groups': [
+                    {
+                        'category': g.category,
+                        'evidence_items': [
+                            {
+                                'matcher_name': e.matcher_name,
+                                'match_type': e.match_type,
+                                'confidence': e.confidence,
+                                'matched_via': e.matched_via,
+                                'evidence_category': e.evidence_category
+                            }
+                            for e in g.evidence_items
+                        ],
+                        'avg_confidence': g.avg_confidence,
+                        'description': g.description
+                    }
+                    for g in evidence_groups
+                ],
+                'reasoning_summary': reasoning_summary,
+                'base_type': base_type.value if hasattr(base_type, 'value') else str(base_type),
+                'boosters_applied': [{'type': 'booster_total', 'value': float(booster)}] if booster else [],
+                'penalties_applied': [{'type': 'ambiguity', 'value': float(penalty_applied)}] if penalty_applied else [],
+                'ambiguity_group_size': ambiguity_count if ambiguity_count > 1 else None,
+                'alternates': alternates,
+                'performance_metrics': {
+                    'execution_time_ms': perf_metrics.execution_time_ms if perf_metrics else None,
+                    'matchers_fired': perf_metrics.matchers_fired if perf_metrics else None,
+                    'matchers_succeeded': perf_metrics.matchers_succeeded if perf_metrics else None,
+                    'parallel_speedup': perf_metrics.parallel_speedup if perf_metrics else None,
+                } if perf_metrics else None
+            }
+
+        return (best_prop, base_type, matched_via, float(final_score))
+
     def _match_column_to_property(
         self,
         col_name: str,
         col_analysis: DataFieldAnalysis,
         properties: List[OntologyProperty],
-    ) -> Optional[Tuple[OntologyProperty, MatchType, str]]:
+    ) -> Optional[Tuple[OntologyProperty, MatchType, str, float]]:
         """
         Match a column to an ontology property using the matcher pipeline.
 
         Returns:
-            Tuple of (property, match_type, matched_via) or None if no match found
+            Tuple of (property, match_type, matched_via, confidence) or None if no match found
         """
-        # Create match context
+        # Broaden candidate set for identifier-like columns to avoid missing cross-class identifiers
+        candidate_props = list(properties)
+        name_lower = col_name.lower()
+        is_id_like = col_analysis.is_identifier or name_lower.endswith('id') or name_lower.endswith('_id') or 'identifier' in name_lower
+        if is_id_like:
+            try:
+                # Pull all datatype properties from ontology and filter for identifier-like labels
+                all_dt_props = [p for p in self.ontology.properties.values() if not p.is_object_property]
+                def is_identifier_prop(p: OntologyProperty) -> bool:
+                    label = (p.label or str(p.uri).split('#')[-1]).lower()
+                    local = str(p.uri).split('#')[-1].lower()
+                    return (
+                        any(tok in label for tok in ('id','identifier','number','code','key','ref','reference'))
+                        or any(tok in local for tok in ('id','identifier','number','code','key','ref','reference'))
+                    )
+                id_props = [p for p in all_dt_props if is_identifier_prop(p)]
+                # Merge, preserving order and uniqueness
+                seen = {str(p.uri) for p in candidate_props}
+                for p in id_props:
+                    if str(p.uri) not in seen:
+                        candidate_props.append(p)
+                        seen.add(str(p.uri))
+            except Exception:
+                # Safe fallback: ignore augmentation if ontology structure differs
+                pass
+
         context = MatchContext(
             column=col_analysis,
             all_columns=[self.data_source.get_analysis(c) for c in self.data_source.get_column_names()],
-            available_properties=properties,
-            domain_hints=None  # TODO: Add domain detection
+            available_properties=candidate_props,
+            domain_hints=None
         )
-
-        # Use matcher pipeline
-        result = self.matcher_pipeline.match(col_analysis, properties, context)
-
-        if result:
-            return (result.property, result.match_type, result.matched_via)
-
+        # Aggregate across matchers with boosters/penalty
+        agg = self._aggregate_matches(col_analysis, candidate_props, context, top_k=5, col_name=col_name)
+        if agg:
+            matched_prop, match_type, matched_via, confidence = agg
+            # Enforce a stronger minimum on final confidence to avoid weak matches being accepted
+            min_required = max(self.config.min_confidence or 0.5, 0.7)
+            if confidence < min_required:
+                return None
+            return agg
         return None
     
     def _build_ontology_context(self, target_class: OntologyClass) -> 'OntologyContext':
@@ -677,91 +922,6 @@ class MappingGenerator:
                     )
 
         return None
-
-    def _build_ontology_context(self, target_class: OntologyClass) -> 'OntologyContext':
-        """Build comprehensive ontology context for human mapping decisions.
-
-        Args:
-            target_class: The target ontology class
-
-        Returns:
-            OntologyContext with all relevant information for analysts
-        """
-        from ..models.alignment import OntologyContext, ClassContext
-
-        # Build target class context
-        target_properties = self.ontology.get_datatype_properties(target_class.uri)
-        target_prop_contexts = [self._build_property_context(prop, str(target_class.uri)) for prop in target_properties]
-
-        target_context = ClassContext(
-            uri=str(target_class.uri),
-            label=target_class.label,
-            comment=target_class.comment,
-            local_name=str(target_class.uri).split("#")[-1].split("/")[-1],
-            properties=target_prop_contexts
-        )
-
-        # Build related classes context (classes that have relationships with target class)
-        related_contexts = []
-        obj_properties = self.ontology.get_object_properties(target_class.uri)
-
-        for obj_prop in obj_properties:
-            if obj_prop.range_type and obj_prop.range_type in self.ontology.classes:
-                related_class = self.ontology.classes[obj_prop.range_type]
-                related_properties = self.ontology.get_datatype_properties(obj_prop.range_type)
-                related_prop_contexts = [self._build_property_context(prop, obj_prop.range_type) for prop in related_properties]
-
-                related_context = ClassContext(
-                    uri=str(related_class.uri),
-                    label=related_class.label,
-                    comment=related_class.comment,
-                    local_name=str(related_class.uri).split("#")[-1].split("/")[-1],
-                    properties=related_prop_contexts
-                )
-                related_contexts.append(related_context)
-
-        # Get all properties in ontology (for comprehensive reference)
-        all_properties = []
-        for class_uri, ontology_class in self.ontology.classes.items():
-            class_properties = self.ontology.get_properties_for_class(class_uri)
-            for prop in class_properties:
-                if not any(p.uri == prop.uri for p in all_properties):  # Avoid duplicates
-                    all_properties.append(prop)
-
-        all_prop_contexts = [self._build_property_context(prop) for prop in all_properties]
-
-        # Get object properties for relationship mapping
-        all_obj_properties = []
-        for class_uri, ontology_class in self.ontology.classes.items():
-            obj_props = self.ontology.get_object_properties(class_uri)
-            for prop in obj_props:
-                if not any(p.uri == prop.uri for p in all_obj_properties):  # Avoid duplicates
-                    all_obj_properties.append(prop)
-
-        obj_prop_contexts = [self._build_property_context(prop) for prop in all_obj_properties]
-
-        return OntologyContext(
-            target_class=target_context,
-            related_classes=related_contexts,
-            all_properties=all_prop_contexts,
-            object_properties=obj_prop_contexts
-        )
-
-    def _build_property_context(self, prop: OntologyProperty, domain_class: str = None) -> 'PropertyContext':
-        """Build context information for a property."""
-        from ..models.alignment import PropertyContext
-
-        return PropertyContext(
-            uri=str(prop.uri),
-            label=prop.label,
-            pref_label=prop.pref_label,
-            alt_labels=prop.alt_labels,
-            hidden_labels=prop.hidden_labels,
-            comment=prop.comment,
-            domain_class=domain_class,
-            range_type=prop.range_type,
-            local_name=str(prop.uri).split("#")[-1].split("/")[-1]
-        )
 
     def _is_likely_abbreviation(self, col_pattern: str, prop_pattern: str) -> bool:
         """Check if column pattern is likely an abbreviation of property pattern."""
@@ -942,7 +1102,7 @@ class MappingGenerator:
             match_result = self._match_column_to_property(col_name, col_analysis, range_props)
             
             if match_result:
-                matched_prop, _, _ = match_result
+                matched_prop, _, _, _ = match_result  # property, match_type, matched_via, confidence
                 potential.append((col_name, matched_prop))
         
         return potential
@@ -968,6 +1128,32 @@ class MappingGenerator:
         # Use custom formatter for clean output
         from .yaml_formatter import save_formatted_mapping
         save_formatted_mapping(self.mapping, output_file, wizard_config=None)
+
+    def save_yarrrml(self, output_file: str):
+        """Save the mapping in YARRRML standard format.
+
+        YARRRML is the standard human-friendly format for RML mapping rules.
+        This ensures interoperability with tools like RMLMapper, RocketRML,
+        Morph-KGC, and SDM-RDFizer.
+
+        Args:
+            output_file: Path to save YARRRML file
+        """
+        if not self.mapping:
+            raise ValueError("No mapping generated. Call generate() first.")
+
+        from ..config.yarrrml_generator import internal_to_yarrrml
+        import yaml
+
+        # Convert internal format to YARRRML
+        yarrrml = internal_to_yarrrml(
+            self.mapping,
+            self.alignment_report.to_dict() if self.alignment_report else None
+        )
+
+        # Save as YAML with clean formatting
+        with open(output_file, 'w', encoding='utf-8') as f:
+            yaml.dump(yarrrml, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
     def save_json(self, output_file: str):
         """Save the mapping to a JSON file."""
@@ -1021,21 +1207,62 @@ class MappingGenerator:
         for col_name, (prop, match_type, confidence) in self._mapped_columns.items():
             confidence_scores.append(confidence)
             confidence_level = get_confidence_level(confidence)
-            # Record full match detail (matcher/matched_via where available)
-            try:
-                # If we used a pipeline, get top candidates to extract matcher name and matched_via
-                context = MatchContext(
-                    column=self.data_source.get_analysis(col_name),
-                    all_columns=[self.data_source.get_analysis(c) for c in self.data_source.get_column_names()],
-                    available_properties=self.ontology.get_datatype_properties(target_class.uri)
-                )
-                top = self.matcher_pipeline.match_all(context.column, context.available_properties, context, top_k=1)
-                matcher_name = top[0].matcher_name if top else 'pipeline'
-                matched_via = top[0].matched_via if top else (prop.label or str(prop.uri).split('#')[-1])
-            except Exception:
-                matcher_name = 'pipeline'
-                matched_via = prop.label or str(prop.uri).split('#')[-1]
-            from ..models.alignment import MatchDetail
+
+            # Get matcher name from evidence that matches the chosen base_type
+            matcher_name = 'pipeline'
+            matched_via = prop.label or str(prop.uri).split('#')[-1]
+
+            extra = self._match_extras.get(col_name, {})
+            evidence_list = extra.get('evidence', [])
+
+            # Find the evidence item that matches the base_type
+            base_type_str = extra.get('base_type', '')
+            for ev in evidence_list:
+                if ev.get('match_type') == base_type_str or str(ev.get('match_type', '')).split('.')[-1].lower() == base_type_str.lower():
+                    matcher_name = ev.get('matcher_name', 'pipeline')
+                    matched_via = ev.get('matched_via', matched_via)
+                    break
+
+            # If no match found in evidence, try to infer from match_type
+            if matcher_name == 'pipeline' and evidence_list:
+                # Use the highest confidence evidence item
+                sorted_evidence = sorted(evidence_list, key=lambda e: e.get('confidence', 0.0), reverse=True)
+                if sorted_evidence:
+                    matcher_name = sorted_evidence[0].get('matcher_name', 'pipeline')
+                    matched_via = sorted_evidence[0].get('matched_via', matched_via)
+
+            from ..models.alignment import MatchDetail, EvidenceItem, EvidenceGroup, AdjustmentItem, AlternateCandidate
+
+            # Convert evidence to EvidenceItem objects
+            evidence_items = [
+                EvidenceItem(
+                    matcher_name=e.get('matcher_name',''),
+                    match_type=e.get('match_type',''),
+                    confidence=float(e.get('confidence',0.0)),
+                    matched_via=e.get('matched_via',''),
+                    evidence_category=e.get('evidence_category', 'other')
+                ) for e in evidence_list
+            ]
+
+            # Convert evidence groups
+            evidence_groups_data = extra.get('evidence_groups', [])
+            evidence_groups = [
+                EvidenceGroup(
+                    category=g.get('category', 'other'),
+                    evidence_items=[
+                        EvidenceItem(
+                            matcher_name=e.get('matcher_name',''),
+                            match_type=e.get('match_type',''),
+                            confidence=float(e.get('confidence',0.0)),
+                            matched_via=e.get('matched_via',''),
+                            evidence_category=e.get('evidence_category', 'other')
+                        ) for e in g.get('evidence_items', [])
+                    ],
+                    avg_confidence=float(g.get('avg_confidence', 0.0)),
+                    description=g.get('description', '')
+                ) for g in evidence_groups_data
+            ]
+
             match_details.append(MatchDetail(
                 column_name=col_name,
                 matched_property=str(prop.uri),
@@ -1043,6 +1270,26 @@ class MappingGenerator:
                 confidence_score=confidence,
                 matcher_name=matcher_name,
                 matched_via=matched_via,
+                evidence=evidence_items,
+                evidence_groups=evidence_groups,
+                reasoning_summary=extra.get('reasoning_summary'),
+                boosters_applied=[
+                    AdjustmentItem(type=b['type'], value=float(b['value']))
+                    for b in extra.get('boosters_applied', [])
+                ],
+                penalties_applied=[
+                    AdjustmentItem(type=p['type'], value=float(p['value']))
+                    for p in extra.get('penalties_applied', [])
+                ],
+                ambiguity_group_size=extra.get('ambiguity_group_size'),
+                alternates=[
+                    AlternateCandidate(
+                        property=a['property'],
+                        combined_confidence=float(a['combined_confidence']),
+                        evidence_count=int(a['evidence_count'])
+                    ) for a in extra.get('alternates', [])
+                ],
+                performance_metrics=extra.get('performance_metrics')
             ))
 
             # Track weak matches (confidence < 0.8)
@@ -1118,7 +1365,7 @@ class MappingGenerator:
                                 column_name=col,
                                 matched_property=predicate,
                                 match_type=MatchType.GRAPH_REASONING,  # FK is a relationship
-                                confidence_score=1.0,
+                                confidence_score=0.92,
                                 matcher_name='RelationshipMatcher',
                                 matched_via=f'Foreign key to {obj_name}',
                             ))
@@ -1136,6 +1383,35 @@ class MappingGenerator:
         avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
         success_rate = mapped_columns / total_columns if total_columns > 0 else 0.0
 
+        # Calculate matcher firing statistics
+        total_evidence_count = sum(len(detail.evidence) for detail in match_details)
+        avg_evidence_count = total_evidence_count / len(match_details) if match_details else 0.0
+
+        # Calculate ontology validation rate (% of matches with ontology matchers)
+        ontology_matchers = {
+            'PropertyHierarchyMatcher',
+            'OWLCharacteristicsMatcher',
+            'RestrictionBasedMatcher',
+            'DataTypeInferenceMatcher',
+            'GraphReasoningMatcher',
+            'StructuralMatcher'
+        }
+
+        matches_with_ontology = 0
+        total_matchers_fired = 0
+
+        for detail in match_details:
+            has_ontology = any(
+                e.matcher_name in ontology_matchers
+                for e in detail.evidence
+            )
+            if has_ontology:
+                matches_with_ontology += 1
+            total_matchers_fired += len(detail.evidence)
+
+        ontology_validation_rate = matches_with_ontology / len(match_details) if match_details else 0.0
+        matchers_fired_avg = total_matchers_fired / len(match_details) if match_details else 0.0
+
         statistics = AlignmentStatistics(
             total_columns=total_columns,
             mapped_columns=mapped_columns,
@@ -1145,7 +1421,10 @@ class MappingGenerator:
             low_confidence_matches=low_conf,
             very_low_confidence_matches=very_low_conf,
             mapping_success_rate=success_rate,
-            average_confidence=avg_confidence
+            average_confidence=avg_confidence,
+            matchers_fired_avg=matchers_fired_avg,
+            avg_evidence_count=avg_evidence_count,
+            ontology_validation_rate=ontology_validation_rate
         )
 
         return AlignmentReport(

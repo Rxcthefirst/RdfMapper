@@ -78,5 +78,29 @@ export const api = {
     const res = await fetch(`/api/projects/${projectId}/shapes`, { method: 'DELETE' })
     if(!res.ok) throw new Error(await res.text())
     return res.json()
-  }
+  },
+  overrideMapping: (projectId: string, column_name: string, property_uri: string) => {
+    const params = new URLSearchParams({ column_name, property_uri });
+    return handle<any>(fetch(`/api/mappings/${projectId}/override?${params.toString()}`, {
+      method: 'POST'
+    }));
+  },
+  getYARRRML: (projectId: string) =>
+    handle<any>(fetch(`/api/mappings/${projectId}/yarrrml`)),
+  downloadYARRRML: async (projectId: string) => {
+    const res = await fetch(`/api/mappings/${projectId}/yarrrml`)
+    if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`))
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${projectId}-mapping.yarrrml.yaml`
+    a.click()
+    URL.revokeObjectURL(url)
+    return { success: true }
+  },
+  getColumnEvidence: (projectId: string, columnName: string) =>
+    handle<any>(fetch(`/api/mappings/${projectId}/evidence/${encodeURIComponent(columnName)}`)),
+  getAllEvidence: (projectId: string) =>
+    handle<any>(fetch(`/api/mappings/${projectId}/evidence`)),
 }

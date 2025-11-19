@@ -1,10 +1,18 @@
 # RDFMap - Semantic Model Data Mapper
 
-**🏆 Production-Ready Quality: 9.2/10 ⭐⭐⭐⭐⭐**
+**🏆 Production-Ready Quality: 9.2/10 ⭐⭐⭐⭐⭐**  
+**📋 Standards Compliant: YARRRML / RML / R2RML**
 
 Convert tabular and structured data (CSV, Excel, JSON, XML) into RDF triples aligned with OWL ontologies using intelligent SKOS-based semantic mapping with AI-powered understanding.
 
 ## 🆕 What's New - November 2025
+
+**YARRRML Standards Compliance**
+- ✅ **YARRRML Format Support** - Read and write YARRRML (YAML-based RML) natively
+- 🔄 **Auto-Format Detection** - Seamlessly works with YARRRML or internal format
+- 🤝 **Ecosystem Interoperability** - Compatible with RMLMapper, RocketRML, Morph-KGC, SDM-RDFizer
+- 🎯 **AI Metadata Preserved** - x-alignment extensions for matcher confidence and evidence
+- 📖 **Standards Compliant** - Follows W3C RML and YARRRML specifications
 
 **Major Intelligence Upgrade: 7.2 → 9.2 (+28%)**
 

@@ -333,13 +333,13 @@ openssl rand -hex 32
 
 ## Support
 
-- **Documentation:** [WEB_UI_ARCHITECTURE.md](docs/WEB_UI_ARCHITECTURE.md)
+- **Documentation:** [WEB_UI_ARCHITECTURE.md](WEB_UI_ARCHITECTURE.md)
 - **API Docs:** http://localhost:8000/api/docs
 - **Issues:** GitHub Issues (when published)
 
 ## Roadmap
 
-See [WEB_UI_ARCHITECTURE.md](docs/WEB_UI_ARCHITECTURE.md) for:
+See [WEB_UI_ARCHITECTURE.md](WEB_UI_ARCHITECTURE.md) for:
 - Detailed feature plan
 - Phase-by-phase implementation
 - Technology choices
@@ -382,5 +382,5 @@ docker-compose up -d
 
 **🎉 Welcome to RDFMap Web!** You're now running a Neo4j-style containerized semantic data mapper with AI-powered intelligence.
 
-Next: Check out the [Architecture Guide](docs/WEB_UI_ARCHITECTURE.md) for the full roadmap.
+Next: Check out the [Architecture Guide](WEB_UI_ARCHITECTURE.md) for the full roadmap.
 

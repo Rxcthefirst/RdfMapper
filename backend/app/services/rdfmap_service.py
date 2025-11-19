@@ -88,6 +88,7 @@ class RDFMapService:
                 classes.append({
                     "uri": class_uri,
                     "label": getattr(ont_class, 'label', None),
+                    "pref_label": getattr(ont_class, 'pref_label', None),
                     "comment": getattr(ont_class, 'comment', None),
                     "skos_labels": {
                         "pref_label": getattr(ont_class, 'skos_pref_label', None),
@@ -102,16 +103,18 @@ class RDFMapService:
                 properties.append({
                     "uri": prop_uri,
                     "label": getattr(ont_prop, 'label', None),
+                    "pref_label": getattr(ont_prop, 'pref_label', None),
                     "comment": getattr(ont_prop, 'comment', None),
-                    "property_type": getattr(ont_prop, 'property_type', None),
+                    "is_object_property": getattr(ont_prop, 'is_object_property', False),
+                    "property_kind": 'object' if getattr(ont_prop, 'is_object_property', False) else 'data',
                     "domain": getattr(ont_prop, 'domain', None),
-                    "range": getattr(ont_prop, 'range', None),
+                    "range": getattr(ont_prop, 'range_type', getattr(ont_prop, 'range', None)),
                     "is_functional": getattr(ont_prop, 'is_functional', False),
                     "is_inverse_functional": getattr(ont_prop, 'is_inverse_functional', False),
                     "skos_labels": {
-                        "pref_label": getattr(ont_prop, 'skos_pref_label', None),
-                        "alt_labels": getattr(ont_prop, 'skos_alt_labels', []),
-                        "hidden_labels": getattr(ont_prop, 'skos_hidden_labels', []),
+                        "pref_label": getattr(ont_prop, 'pref_label', None) or getattr(ont_prop, 'skos_pref_label', None),
+                        "alt_labels": getattr(ont_prop, 'alt_labels', []) or getattr(ont_prop, 'skos_alt_labels', []),
+                        "hidden_labels": getattr(ont_prop, 'hidden_labels', []) or getattr(ont_prop, 'skos_hidden_labels', []),
                     }
                 })
 
@@ -140,37 +143,48 @@ class RDFMapService:
         mapped_columns = 0
 
         for sheet in mapping_config.get('sheets', []):
-            # Count direct column mappings (data properties)
+            # Count direct column mappings (data properties on main resource)
             cols = sheet.get('columns', {}) or {}
             direct_mapped = [name for name, val in cols.items() if isinstance(val, dict) and val.get('as')]
 
             # Count object property mappings
             objects = sheet.get('objects', {}) or {}
-            object_count = len(objects)  # Each object = 1 foreign key column
 
-            # Count columns used in object properties
-            object_columns = []
+            # Collect all unique columns used in objects (both FK columns in iri_template and data property columns)
+            object_columns_set = set()
             for obj_name, obj_config in objects.items():
                 if isinstance(obj_config, dict):
+                    # Extract column names from iri_template (e.g., {BorrowerID})
+                    # Exclude common template variables like base_iri
+                    iri_template = obj_config.get('iri_template', '')
+                    import re
+                    fk_cols = re.findall(r'{(\w+)}', iri_template)
+                    # Filter out known template variables
+                    fk_cols = [col for col in fk_cols if col not in ('base_iri', 'base_uri', 'namespace')]
+                    object_columns_set.update(fk_cols)
+
+                    # Add columns from object properties
                     properties = obj_config.get('properties', []) or []
                     for prop in properties:
                         if isinstance(prop, dict):
                             col = prop.get('column')
                             if col:
-                                object_columns.append(col)
+                                object_columns_set.add(col)
 
-            # Total mapped = direct columns + FK columns + object property columns
-            all_mapped_columns = direct_mapped + object_columns
-            sheet_total = len(cols) + object_count + len(object_columns)
-            sheet_mapped = len(all_mapped_columns) + object_count
+            object_columns = list(object_columns_set)
+
+            # Total unique columns in the sheet = direct columns + object columns
+            all_column_names = set(direct_mapped) | object_columns_set
+            sheet_total = len(all_column_names)
+            sheet_mapped = len(all_column_names)  # All columns we know about are mapped
 
             summary_sheets.append({
                 'sheet': sheet.get('name'),
                 'total_columns': sheet_total,
                 'mapped_columns': sheet_mapped,
                 'direct_mappings': direct_mapped,
-                'object_properties': object_count,
-                'object_data_properties': object_columns,
+                'object_properties': len(objects),
+                'object_columns': object_columns,
             })
 
             total_columns += sheet_total
@@ -259,6 +273,13 @@ class RDFMapService:
             except Exception as e:
                 logger.warning(f"Failed to export alignment report: {e}")
             summary = self.summarize_mapping(mapping_config)
+            # Extract match details for UI convenience
+            match_details = []
+            try:
+                if alignment_report and hasattr(alignment_report, 'match_details'):
+                    match_details = [md.dict() for md in alignment_report.match_details]
+            except Exception as e:
+                logger.warning(f"Failed to serialize match details: {e}")
             return {
                 "mapping_config": mapping_config,
                 "mapping_file": str(mapping_file),
@@ -266,7 +287,7 @@ class RDFMapService:
                 "alignment_report_json": str(report_json),
                 "alignment_report_html": str(report_html),
                 "mapping_summary": summary,
-                "formatted_yaml": open(mapping_file).read(),
+                "match_details": match_details,
             }
         except Exception as e:
             logger.error(f"Error generating mappings: {e}", exc_info=True)
