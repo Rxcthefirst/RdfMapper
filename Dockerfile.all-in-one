@@ -1,0 +1,92 @@
+FROM python:3.11-slim as backend-builder
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy backend requirements and install Python dependencies
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install RDFMap core library from PyPI
+ARG RDFMAP_VERSION=0.3.0
+RUN pip install --no-cache-dir semantic-rdf-mapper==${RDFMAP_VERSION}
+
+# Copy backend application code
+COPY backend/ /app/backend/
+
+
+# Frontend build stage
+FROM node:20-alpine as frontend-builder
+
+WORKDIR /app
+
+# Copy frontend files and build
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ .
+RUN npm run build
+
+
+# Final all-in-one stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    nginx \
+    supervisor \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python dependencies from builder
+COPY --from=backend-builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=backend-builder /usr/local/bin /usr/local/bin
+
+# Copy backend application
+COPY --from=backend-builder /app/backend /app/backend
+
+# Copy frontend build
+COPY --from=frontend-builder /app/dist /usr/share/nginx/html
+
+# Copy nginx configuration
+COPY docker/all-in-one/nginx.conf /etc/nginx/nginx.conf
+
+# Copy supervisor configuration
+COPY docker/all-in-one/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Create necessary directories
+RUN mkdir -p /app/uploads /app/data /var/log/supervisor /var/log/nginx /var/lib/nginx
+
+# Create non-root user
+RUN useradd -m -u 1000 rdfmap && \
+    chown -R rdfmap:rdfmap /app /usr/share/nginx/html /var/log/supervisor /var/log/nginx /var/lib/nginx && \
+    chmod -R 755 /var/lib/nginx
+
+# Copy entrypoint script
+COPY docker/all-in-one/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Switch to non-root user
+USER rdfmap
+
+# Expose port 8080 (nginx serves both frontend and proxies API)
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Start supervisor (manages nginx + API + worker)
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
+
+

@@ -73,24 +73,29 @@ See [FINAL_ACHIEVEMENT_REPORT.md](docs/FINAL_ACHIEVEMENT_REPORT.md) for complete
 
 ### Quick Start with Docker (Recommended)
 
-Get started in seconds with our pre-built Docker images:
+Get the complete RDFMap stack running in **one command**:
 
 ```bash
-# Pull and run the complete stack
-curl -O https://raw.githubusercontent.com/Rxcthefirst/RdfMapper/main/docker-compose.prod.yml
-docker-compose -f docker-compose.prod.yml up -d
+docker run -d -p 8080:8080 --name rdfmap rxcthefirst/rdfmap:latest
 
 # Access the UI at http://localhost:8080
 ```
 
-**What you get**:
+**That's it!** Everything included:
 - 🎨 Web UI (React + Vite)
 - ⚙️ REST API (FastAPI)
 - 🔄 Background workers (Celery)
-- 💾 Database (PostgreSQL)
-- 📮 Task queue (Redis)
+- 💾 Built-in storage (SQLite)
 
-See **[Docker Deployment Guide](DOCKER_DEPLOYMENT_GUIDE.md)** for detailed instructions.
+**With persistent data:**
+```bash
+docker run -d -p 8080:8080 \
+  -v rdfmap-data:/app/data \
+  --name rdfmap \
+  rxcthefirst/rdfmap:latest
+```
+
+**Advanced: Microservices deployment** for production scaling - see **[Docker Guide](DOCKER_DEPLOYMENT_GUIDE.md)**
 
 ### Requirements
 - Python 3.11+ (recommended: Python 3.13)

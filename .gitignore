@@ -62,3 +62,22 @@ test_data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Web UI specific
+backend/__pycache__/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+.env
+.env.local
+.env.production
+uploads/
+data/
+
+# Docker volumes
+postgres_data/
+redis_data/
+
+# IDE
+*.code-workspace
+

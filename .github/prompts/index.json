@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "items": [
+    {
+      "id": "REF-001",
+      "title": "Matcher Responsibilities, Aggregation, and Confidence Calibration – Refactor Design",
+      "type": "reference",
+      "path": "REF-001-matchers-refactor-design.md",
+      "tags": ["matchers", "confidence", "aggregation"],
+      "links": ["LOG-001", "TASK-001"],
+      "status": "draft",
+      "date": "2025-11-16"
+    },
+    {
+      "id": "TASK-001",
+      "title": "Working Prompt – Matcher Refactor & Confidence Calibration (Phase 1B)",
+      "type": "task",
+      "path": "TASK-001-matchers-refactor-working-prompt.md",
+      "tags": ["matchers", "aggregation", "confidence"],
+      "links": ["REF-001", "LOG-001"],
+      "status": "active",
+      "date": "2025-11-16"
+    },
+    {
+      "id": "LOG-001",
+      "title": "Progress Log – Matcher Refactor & Calibration",
+      "type": "log",
+      "path": "LOG-001-matchers-refactor-progress.md",
+      "tags": ["progress", "decisions"],
+      "links": ["REF-001", "TASK-001"],
+      "status": "active",
+      "date": "2025-11-16"
+    },
+    {
+      "id": "PERSONA-001",
+      "title": "Engineering Agent Persona & Workflow",
+      "type": "reference",
+      "path": "PERSONA.md",
+      "tags": ["persona", "workflow", "prompts"],
+      "links": ["REF-001", "TASK-001", "LOG-001"],
+      "status": "active",
+      "date": "2025-11-16"
+    },
+    {
+      "id": "TASK-QUEUE",
+      "title": "Task Queue & Implementation Roadmap",
+      "type": "task",
+      "path": "TASK-QUEUE.md",
+      "tags": ["roadmap", "priorities", "queue"],
+      "links": ["LOG-001", "TASK-001", "REF-001"],
+      "status": "active",
+      "date": "2025-11-16"
+    },
+    {
+      "id": "STAGE-2-SUMMARY",
+      "title": "Stage 2 Completion Summary & Next Steps",
+      "type": "reference",
+      "path": "STAGE-2-SUMMARY.md",
+      "tags": ["summary", "milestone", "stage-2"],
+      "links": ["LOG-001", "TASK-QUEUE", "REF-001"],
+      "status": "active",
+      "date": "2025-11-16"
+    }
+  ]
+}
+

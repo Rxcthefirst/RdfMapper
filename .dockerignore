@@ -1,0 +1,72 @@
+# Git
+*.backup
+*.bak
+*_OLD.*
+# Old/backup files
+
+debug_*.py
+demo*.py
+examples/
+# Examples and demos
+
+!docker/*/entrypoint.sh
+*.sh
+# Scripts
+
+*.local
+.env.*
+.env
+# Config files (use environment variables)
+
+output/
+uploads/
+data/
+# Data and uploads (mounted as volumes)
+
+*.zip
+*.tar.gz
+# Build artifacts
+
+.DS_Store
+*~
+*.swo
+*.swp
+.idea/
+.vscode/
+# Development
+
+*_test.py
+test_*.py
+.tox/
+htmlcov/
+.coverage
+.pytest_cache/
+# Testing
+
+*.egg
+build/
+dist/
+*.egg-info/
+.venv_*/
+.venv/
+venv/
+env/
+.Python
+*.so
+*$py.class
+*.py[cod]
+__pycache__/
+# Python
+
+prompts/
+docs/
+*.md
+# Documentation
+
+.github
+# CI/CD
+
+.gitattributes
+.gitignore
+.git
+

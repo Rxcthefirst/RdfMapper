@@ -24,6 +24,8 @@ There should be a focus on using Polars for data processing to ensure high perfo
 When documenting, use markdown format with appropriate headings, code blocks, and lists to enhance readability. Lets make sure that all workflows
 are well documented in `docs/WORKFLOW_GUIDE.md`.
 
+Our definition of a "test" is a pytest script that can be run to validate specific functionality of the codebase. Each test should be isolated, repeatable, and cover edge cases where applicable. We want to create a test driven development environment.
+
 Run all tests using `pytest` and ensure all tests pass before finalizing any code changes.
 
 Do not use the && in your bash commands. Use separate lines for each command. We are on MacOS which does not have a timeout command by default. Avoid using timeout in bash commands.
