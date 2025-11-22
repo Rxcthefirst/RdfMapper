@@ -9,10 +9,15 @@ from ..models.mapping import MappingConfig
 
 
 def load_mapping_config(config_path: Union[str, Path]) -> MappingConfig:
-    """Load and validate mapping configuration from YAML or JSON file.
-    
-    Supports both YARRRML standard format and internal format.
-    Auto-detects format and converts YARRRML to internal representation.
+    """Load and validate mapping configuration from YAML, JSON, or RML file.
+
+    Supports:
+    - YARRRML format (.yaml, .yml)
+    - Internal format (.yaml, .yml, .json)
+    - RML format (.ttl, .rdf, .nt, .n3)
+    - R2RML format (.ttl, .rdf, .nt, .n3)
+
+    Auto-detects format and converts to internal representation.
 
     Args:
         config_path: Path to configuration file
@@ -29,23 +34,30 @@ def load_mapping_config(config_path: Union[str, Path]) -> MappingConfig:
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
     
-    # Load YAML/JSON
-    with config_path.open("r", encoding="utf-8") as f:
-        if config_path.suffix in [".yaml", ".yml"]:
-            config_data = yaml.safe_load(f)
-        elif config_path.suffix == ".json":
-            import json
-            config_data = json.load(f)
-        else:
-            raise ValueError(f"Unsupported config file format: {config_path.suffix}")
-    
-    # Detect format and convert YARRRML if needed
-    format_type = _detect_format(config_data)
+    # Check if it's an RDF format (RML/R2RML)
+    rdf_extensions = ['.ttl', '.rdf', '.nt', '.n3', '.xml']
+    if config_path.suffix.lower() in rdf_extensions:
+        # Parse as RML
+        from .rml_parser import parse_rml
+        config_data = parse_rml(config_path)
+    else:
+        # Load YAML/JSON
+        with config_path.open("r", encoding="utf-8") as f:
+            if config_path.suffix in [".yaml", ".yml"]:
+                config_data = yaml.safe_load(f)
+            elif config_path.suffix == ".json":
+                import json
+                config_data = json.load(f)
+            else:
+                raise ValueError(f"Unsupported config file format: {config_path.suffix}")
 
-    if format_type == 'yarrrml':
-        # Convert YARRRML to internal format
-        from .yarrrml_parser import yarrrml_to_internal
-        config_data = yarrrml_to_internal(config_data, config_path.parent)
+        # Detect format and convert YARRRML if needed
+        format_type = _detect_format(config_data)
+
+        if format_type == 'yarrrml':
+            # Convert YARRRML to internal format
+            from .yarrrml_parser import yarrrml_to_internal
+            config_data = yarrrml_to_internal(config_data, config_path.parent)
 
     # Validate with Pydantic
     try:
