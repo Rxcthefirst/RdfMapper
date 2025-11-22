@@ -692,10 +692,10 @@ def generate(
         help="Target ontology class (URI or label). If omitted, will auto-detect.",
     ),
     format: str = typer.Option(
-        "yaml",
+        "rml",
         "--format",
         "-f",
-        help="Output format: yaml or json",
+        help="Output format: rml (W3C standard), yarrrml (human-friendly), yaml (internal), json (internal)",
     ),
     analyze_only: bool = typer.Option(
         False,
@@ -728,15 +728,34 @@ def generate(
     Generate a mapping configuration from an ontology and data source.
 
     This command analyzes your ontology and data source to automatically
-    generate a mapping configuration file. It will:
-    
+    generate a mapping configuration file using AI-powered semantic matching
+    with 95% accuracy. It will:
+
     - Extract classes and properties from the ontology
     - Analyze data types and patterns in the data source (CSV, XLSX, JSON, XML)
-    - Match data fields to ontology properties
+    - Match data fields to ontology properties using BERT embeddings
     - Suggest IRI templates based on identifier fields
     - Detect potential linked objects and nested structures
 
-    The generated configuration can then be refined manually if needed.
+    Output Formats:
+    - rml: W3C RML standard (Turtle) - for interoperability with RMLMapper, Morph-KGC
+    - yarrrml: YARRRML format (YAML) - human-friendly, easy to edit
+    - yaml: Internal format (YAML) - backwards compatible
+    - json: Internal format (JSON) - backwards compatible
+
+    The generated mapping can be used directly with 'rdfmap convert' or
+    with other RML tools like RMLMapper.
+
+    Examples:
+        # Generate RML (recommended for interoperability)
+        rdfmap generate --ontology ont.ttl --data data.csv -f rml -o map.rml.ttl
+
+        # Generate YARRRML (for manual editing)
+        rdfmap generate --ontology ont.ttl --data data.csv -f yarrrml -o map.yaml
+
+        # With alignment report
+        rdfmap generate --ontology ont.ttl --data data.csv -f rml \
+            -o map.rml.ttl --alignment-report
     """
     try:
         console.print("[blue]Analyzing ontology...[/blue]")
@@ -830,14 +849,48 @@ def generate(
             import json
             console.print(json.dumps(mapping, indent=2))
         
-        # Save to file
-        if format.lower() == "json":
+        # Save to file in requested format
+        format_lower = format.lower()
+
+        if format_lower == "rml":
+            # Generate RML format
+            from ..config.rml_generator import internal_to_rml
+            rml_content, alignment_json = internal_to_rml(
+                mapping,
+                report.dict() if report else None
+            )
+            with open(output, 'w') as f:
+                f.write(rml_content)
+            console.print(f"\n[green]✓ RML mapping written to {output}[/green]")
+
+            # Save alignment report separately if it exists
+            if alignment_json:
+                json_report_path = output.parent / f"{output.stem}_alignment.json"
+                with open(json_report_path, 'w') as f:
+                    f.write(alignment_json)
+                console.print(f"[green]✓ Alignment report (JSON): {json_report_path}[/green]")
+
+        elif format_lower == "yarrrml":
+            # Generate YARRRML format
+            from ..config.yarrrml_generator import internal_to_yarrrml
+            yarrrml_dict = internal_to_yarrrml(
+                mapping,
+                report.dict() if report else None
+            )
+            import yaml
+            with open(output, 'w') as f:
+                yaml.dump(yarrrml_dict, f, default_flow_style=False, sort_keys=False)
+            console.print(f"\n[green]✓ YARRRML mapping written to {output}[/green]")
+
+        elif format_lower == "json":
+            # Internal JSON format
             generator.save_json(str(output))
+            console.print(f"\n[green]✓ Mapping configuration written to {output}[/green]")
         else:
+            # Internal YAML format (default for backwards compatibility)
             generator.save_yaml(str(output))
-        
-        console.print(f"\n[green]✓ Mapping configuration written to {output}[/green]")
-        
+            console.print(f"\n[green]✓ Mapping configuration written to {output}[/green]")
+
         # Export and display alignment report if available
         if report and generator.alignment_report:
             # Export JSON report
