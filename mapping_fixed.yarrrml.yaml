@@ -1,0 +1,33 @@
+prefixes:
+  xsd: http://www.w3.org/2001/XMLSchema#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  ex: https://example.com/mortgage#
+base: http://example.org/
+sources:
+  loans:
+  - examples/mortgage/data/loans.csv~csv
+mappings:
+  loans:
+    sources: $loans
+    s: $(base_iri)mortgage_loan/$(LoanID)
+    po:
+    - - a
+      - ex:MortgageLoan
+    - - ex:loanNumber
+      - $(LoanID)
+      - xsd:string
+    - - ex:principalAmount
+      - $(Principal)
+      - xsd:integer
+    - - ex:interestRate
+      - $(InterestRate)
+      - xsd:decimal
+    - - ex:originationDate
+      - $(OriginationDate)
+      - xsd:date
+    - - ex:loanTerm
+      - $(LoanTerm)
+      - xsd:integer
+    - - ex:loanStatus
+      - $(Status)
+      - xsd:string

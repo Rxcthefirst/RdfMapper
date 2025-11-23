@@ -163,15 +163,17 @@ class RMLParser:
 
         # Extract predicate-object maps
         po_maps = list(self.graph.objects(triples_map, RR.predicateObjectMap))
-        columns = self._extract_predicate_object_maps(po_maps, source_info['columns'])
+        columns_dict = self._extract_predicate_object_maps_as_dict(po_maps, source_info['columns'])
 
-        # Build sheet configuration
+        # Build sheet configuration in internal format
         sheet = {
             'name': source_info['name'],
             'source': source_info['source'],
-            'class': subject_info['class'],
-            'subject_template': subject_info['template'],
-            'columns': columns
+            'row_resource': {
+                'class': subject_info['class'],
+                'iri_template': subject_info['template']
+            },
+            'columns': columns_dict  # Dict format, not list!
         }
 
         # Add optional fields
@@ -272,7 +274,7 @@ class RMLParser:
         po_maps: List[URIRef],
         columns: List[str]
     ) -> List[Dict[str, Any]]:
-        """Extract column mappings from predicate-object maps."""
+        """Extract column mappings from predicate-object maps (returns list for backwards compatibility)."""
         result = []
 
         for po_map in po_maps:
@@ -305,8 +307,47 @@ class RMLParser:
 
         return result
 
+    def _extract_predicate_object_maps_as_dict(
+        self,
+        po_maps: List[URIRef],
+        columns: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Extract column mappings from predicate-object maps as dict (column_name -> mapping)."""
+        result = {}
+
+        for po_map in po_maps:
+            # Get predicate
+            predicate = self.graph.value(po_map, RR.predicate)
+            if not predicate:
+                continue
+
+            predicate_uri = self._compact_uri(str(predicate))
+
+            # Get object map
+            object_map = self.graph.value(po_map, RR.objectMap)
+            if not object_map:
+                # Try shortcut predicate-object
+                obj = self.graph.value(po_map, RR.object)
+                if obj:
+                    # Constant value - use property name as key
+                    column_name = f"constant_{len(result)}"
+                    result[column_name] = {
+                        'as': predicate_uri,
+                        'datatype': self._infer_datatype(obj),
+                        'default': str(obj),
+                    }
+                continue
+
+            # Extract from object map
+            column_mapping = self._extract_object_map_for_dict(object_map, predicate_uri)
+            if column_mapping:
+                column_name = column_mapping.pop('_column_name')
+                result[column_name] = column_mapping
+
+        return result
+
     def _extract_object_map(self, object_map: URIRef, predicate_uri: str) -> Optional[Dict[str, Any]]:
-        """Extract column mapping from object map."""
+        """Extract column mapping from object map (returns list format for backwards compatibility)."""
         mapping = {'property': predicate_uri}
 
         # Get reference (column name)
@@ -331,6 +372,65 @@ class RMLParser:
                     import re
                     template_str = str(template)
                     template_str = re.sub(r'\{(\w+)\}', r'$(\1)', template_str)
+                    mapping['template'] = template_str
+                else:
+                    return None
+
+        # Get datatype
+        datatype = self.graph.value(object_map, RR.datatype)
+        if datatype:
+            mapping['datatype'] = self._compact_uri(str(datatype))
+
+        # Get language
+        language = self.graph.value(object_map, RR.language)
+        if language:
+            mapping['language'] = str(language)
+
+        # Check if it's an object property (reference to another resource)
+        term_type = self.graph.value(object_map, RR.termType)
+        if term_type and str(term_type) == str(RR.IRI):
+            mapping['object_property'] = True
+
+        # Extract x-alignment metadata if present
+        confidence = self.graph.value(object_map, XALIGN.confidence)
+        if confidence:
+            mapping['_confidence'] = float(confidence)
+
+        matcher = self.graph.value(object_map, XALIGN.matcher)
+        if matcher:
+            mapping['_matcher'] = str(matcher)
+
+        return mapping
+
+    def _extract_object_map_for_dict(self, object_map: URIRef, predicate_uri: str) -> Optional[Dict[str, Any]]:
+        """Extract column mapping from object map for dict format (uses 'as' property)."""
+        mapping = {'as': predicate_uri}
+
+        # Get reference (column name)
+        reference = self.graph.value(object_map, RML.reference)
+        if not reference:
+            # Try R2RML column
+            reference = self.graph.value(object_map, RR.column)
+
+        if reference:
+            column_name = str(reference)
+            # Store column name to use as dict key
+            mapping['_column_name'] = column_name
+        else:
+            # Try constant
+            constant = self.graph.value(object_map, RR.constant)
+            if constant:
+                # For constants, use a generated name
+                mapping['_column_name'] = f"constant_{predicate_uri.split(':')[-1]}"
+                mapping['default'] = str(constant)
+            else:
+                # Try template
+                template = self.graph.value(object_map, RR.template)
+                if template:
+                    import re
+                    template_str = str(template)
+                    template_str = re.sub(r'\{(\w+)\}', r'$(\1)', template_str)
+                    mapping['_column_name'] = f"template_{predicate_uri.split(':')[-1]}"
                     mapping['template'] = template_str
                 else:
                     return None

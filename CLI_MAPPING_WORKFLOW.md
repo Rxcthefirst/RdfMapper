@@ -5,12 +5,114 @@
 
 ---
 
-## 🎯 Current CLI Workflow
+## 📌 Executive Summary
 
-### Step 1: Generate Mapping Configuration with AI
+### Three Commands, Three Purposes
+
+| Command | Purpose | Input | Output | Status |
+|---------|---------|-------|--------|--------|
+| **`generate`** | AI-powered mapping generation | Ontology + Data | Internal YAML | ✅ Exists |
+| **`init`** | Interactive wizard | User prompts | Internal YAML (calls `generate`) | ✅ Exists |
+| **`export`** | Export to standard formats | Internal YAML | RML or YARRRML | ❌ **MISSING** |
+| **`convert`** | Transform data to RDF | Mapping + Data | RDF triples | ✅ Exists |
+
+### Key Clarifications
+
+1. **`init` is a wizard** that guides users through decisions, then calls `generate` at the end
+2. **`generate` is the AI engine** that creates mappings from ontology + data
+3. **`export` does NOT exist** - this is what needs to be added
+4. **`convert` transforms DATA** (CSV → RDF), NOT mappings
+
+### What's Missing
+
+Users can create mappings (`generate`/`init`) but **cannot export them** to RML/YARRRML formats for interoperability.
+
+**Needed**: `rdfmap export --format rml config.yaml -o output.rml.ttl`
+
+---
+
+## 🎯 Current CLI Workflow (CORRECTED)
+
+### Visual Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MAPPING GENERATION                        │
+│                                                              │
+│  Option A: Direct                 Option B: Wizard          │
+│  ┌──────────────┐                 ┌──────────────┐         │
+│  │   generate   │                 │     init     │         │
+│  │ (AI engine)  │                 │  (wizard)    │         │
+│  └──────┬───────┘                 └──────┬───────┘         │
+│         │                                │                  │
+│         │    Internally calls            │                  │
+│         └────────────────────────────────┘                  │
+│                        ↓                                     │
+│              my_mapping.yaml                                │
+│              (Internal YAML)                                │
+└─────────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────────┐
+│                  EXPORT MAPPINGS (MISSING! ❌)               │
+│                                                              │
+│              ┌──────────────┐                               │
+│              │    export    │  ← NEEDS TO BE ADDED          │
+│              └──────┬───────┘                               │
+│                     │                                        │
+│         ┌───────────┴───────────┐                           │
+│         ↓                       ↓                            │
+│  mapping.rml.ttl       mapping.yarrrml.yaml                 │
+│  (RML standard)        (YARRRML standard)                   │
+└─────────────────────────────────────────────────────────────┘
+                        ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    CONVERT DATA                              │
+│                                                              │
+│              ┌──────────────┐                               │
+│              │   convert    │                               │
+│              └──────┬───────┘                               │
+│                     │                                        │
+│              Reads mapping                                   │
+│              Reads data.csv                                  │
+│                     ↓                                        │
+│               output.ttl                                     │
+│               (RDF triples)                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Step 1A: Generate Mapping with AI (Non-Interactive)
 
 ```bash
-# Interactive wizard (AI-powered matching)
+# Direct AI-powered mapping generation
+rdfmap generate --ontology ontology.ttl --data data.csv --output my_mapping.yaml
+
+# With target class specified
+rdfmap generate --ontology ontology.ttl --data data.csv \
+    --class "schema:Person" --output my_mapping.yaml
+
+# With alignment report
+rdfmap generate --ontology ontology.ttl --data data.csv \
+    --output my_mapping.yaml --alignment-report
+```
+
+**What happens**:
+1. Analyzes ontology (extracts classes, properties)
+2. Analyzes data source (column types, patterns)
+3. **AI matches columns to properties** (95% auto-mapping)
+4. Generates mapping configuration
+5. Saves internal YAML format to `my_mapping.yaml`
+6. Optionally saves alignment report (AI metadata)
+
+**Output Format**: Internal YAML format (not YARRRML, not RML)
+
+**Location**: `src/rdfmap/cli/main.py` → `generate()` command
+
+---
+
+### Step 1B: Interactive Wizard (Alternative)
+
+```bash
+# Interactive wizard walks through configuration
 rdfmap init --output my_mapping.yaml
 
 # With template
@@ -18,15 +120,18 @@ rdfmap init --template financial-loans --output loans_mapping.yaml
 ```
 
 **What happens**:
-1. User provides data file path (CSV, Excel, JSON, XML)
-2. User provides ontology file path (TTL, RDF/XML, etc.)
-3. User specifies target class
-4. **AI generates mappings** (95% auto-mapping)
-5. Saves internal YAML format to `my_mapping.yaml`
+1. Wizard prompts for data file path
+2. Wizard prompts for ontology file path
+3. Wizard prompts for target class
+4. Wizard asks about processing options
+5. **Calls `generate` internally at the end**
+6. Saves internal YAML format to `my_mapping.yaml`
 
 **Output Format**: Internal YAML format (not YARRRML, not RML)
 
-**Location**: `src/rdfmap/cli/main.py` → `init()` command
+**Location**: `src/rdfmap/cli/main.py` → `init()` command → wizard → `generate()`
+
+**Key Point**: `init` is a **wizard wrapper** around `generate`
 
 ---
 
@@ -356,17 +461,30 @@ Options:
 
 ### Clear Distinction
 
-**`rdfmap init`**: Generate mapping configuration (with AI)
-**`rdfmap export`**: Export mapping to standard format  
-**`rdfmap convert`**: Convert data to RDF using mapping
+**`rdfmap generate`**: AI-powered mapping generation (direct command)  
+**`rdfmap init`**: Interactive wizard (guides user, calls `generate` at end)  
+**`rdfmap export`**: Export mapping to standard format (RML/YARRRML)  
+**`rdfmap convert`**: Convert **data** to RDF using mapping  
 
 ### Analogy
 
 ```
-init    = "Write the recipe" (mapping configuration)
-export  = "Share the recipe" (export to standard format)
-convert = "Cook the meal" (apply mapping to data)
+generate/init = "Write the recipe" (create mapping config with AI)
+export        = "Share the recipe" (export to standard format) ← MISSING
+convert       = "Cook the meal" (apply mapping to data)
 ```
+
+### Key Insight
+
+**`generate` vs `init`**:
+- `generate`: Direct, command-line driven, all params as flags
+- `init`: Interactive wizard, asks questions, calls `generate` internally
+- **Both produce the same output**: internal YAML mapping config
+
+**`export` vs `convert`** (IMPORTANT!):
+- `export`: Transforms **MAPPINGS** (internal YAML → RML/YARRRML)
+- `convert`: Transforms **DATA** (CSV/JSON → RDF triples)
+- **These are completely different operations!**
 
 ---
 
@@ -499,10 +617,12 @@ def export(
 
 ## 📊 Summary
 
-### Current State
-- ✅ Can generate mappings (AI-powered)
-- ✅ Can import RML/YARRRML
-- ❌ **Cannot export to RML/YARRRML**
+### Current Commands (What Exists)
+- ✅ **`generate`**: AI-powered mapping generation (direct, non-interactive)
+- ✅ **`init`**: Interactive wizard (wraps generate at the end)
+- ✅ **`convert`**: Convert data to RDF using mapping
+- ✅ Can import RML/YARRRML in convert
+- ❌ **Cannot export generated mappings to RML/YARRRML**
 
 ### After Adding `export`
 - ✅ Complete workflow
@@ -510,14 +630,20 @@ def export(
 - ✅ No vendor lock-in
 - ✅ Standards compliance
 
-### User Flow
+### User Flow (Corrected)
 ```
-rdfmap init           → Generate with AI
+rdfmap generate       → Generate with AI (or init for wizard)
 rdfmap export         → Share in standard format  ← ADD THIS
 rdfmap convert        → Convert data to RDF
 ```
 
-**Status**: Backend ready, CLI wrapper needed  
+**Clarification**:
+- **`init`** = Interactive wizard → calls `generate` at end
+- **`generate`** = Direct AI mapping generation (the actual AI engine)
+- **`export`** = Export mappings to RML/YARRRML ← **MISSING**
+- **`convert`** = Convert data to RDF (not mappings!)
+
+**Status**: Backend ready, CLI export wrapper needed  
 **ETA**: 1-2 hours to complete  
 **Priority**: High (completes RML support story)
 

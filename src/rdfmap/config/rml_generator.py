@@ -47,8 +47,9 @@ class RMLGenerator:
         # Get base IRI
         if 'defaults' in internal_config and 'base_iri' in internal_config['defaults']:
             self.base_uri = internal_config['defaults']['base_iri']
+            # Don't add # if it already ends with / (which is typical for base IRIs)
             if not self.base_uri.endswith('#') and not self.base_uri.endswith('/'):
-                self.base_uri += '#'
+                self.base_uri += '/'  # Changed from '#' to '/'
 
         # Convert each sheet to a TriplesMap
         for sheet in internal_config.get('sheets', []):
@@ -105,8 +106,12 @@ class RMLGenerator:
         # Template
         template = sheet.get('subject_template', sheet.get('row_resource', {}).get('iri_template', ''))
         if template:
-            # Convert $(column) to {column} for RML
+            # Substitute base_iri with actual value (not a column reference)
+            template = template.replace('$(base_iri)', self.base_uri)
+
+            # Convert $(column) to {column} for RML (only for actual column references)
             template = re.sub(r'\$\((\w+)\)', r'{\1}', template)
+
             self.graph.add((sm_node, RR.template, Literal(template)))
 
         # Class
