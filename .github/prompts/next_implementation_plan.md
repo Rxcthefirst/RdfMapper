@@ -358,7 +358,7 @@ pytest tests/test_skos_integration.py
 ### End-to-End Validation:
 ```bash
 # Test with mortgage example
-rdfmap generate --ontology examples/mortgage/ontology/mortgage.ttl \
+rdfmap generate --ontology examples/mortgage/ontology/mortgage_ontology.ttl \
                 --skos examples/mortgage/vocabulary/mortgage_vocab.ttl \
                 --data examples/mortgage/data/loans.csv \
                 --output test_output.ttl

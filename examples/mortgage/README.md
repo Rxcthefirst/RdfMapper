@@ -45,7 +45,7 @@ cd /path/to/SemanticModelDataMapper
 rdfmap convert \
   --mapping examples/mortgage/config/mortgage_mapping.yaml \
   --format ttl \
-  --output output/mortgage.ttl
+  --output output/mortgage_ontology.ttl
 ```
 
 ### With Validation
@@ -53,9 +53,9 @@ rdfmap convert \
 ```bash
 rdfmap convert \
   --mapping examples/mortgage/config/mortgage_mapping.yaml \
-  --ontology examples/mortgage/ontology/mortgage.ttl \
+  --ontology examples/mortgage/ontology/mortgage_ontology.ttl \
   --format ttl \
-  --output output/mortgage.ttl \
+  --output output/mortgage_ontology.ttl \
   --validate \
   --report output/validation_report.json \
   --verbose

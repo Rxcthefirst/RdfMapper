@@ -211,7 +211,7 @@ def test_history_aware_matcher():
             confidence=0.85,
             user_accepted=True,
             correction_to=None,
-            ontology_file="mortgage.ttl",
+            ontology_file="mortgage_ontology.ttl",
             data_file="loans.csv",
             timestamp=datetime.now().isoformat(),
             matcher_name="SemanticMatcher"

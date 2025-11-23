@@ -63,7 +63,7 @@ echo ""
 echo "🎯 Step 6: Generate mapping from ontology and data"
 echo "-------------------------------------------------"
 rdfmap generate \
-  --ontology examples/mortgage/ontology/mortgage.ttl \
+  --ontology examples/mortgage/ontology/mortgage_ontology.ttl \
   --data examples/mortgage/data/loans.csv \
   --class "https://example.com/mortgage#MortgageLoan" \
   --output "$OUTPUT_DIR/generated_mapping.yaml" \

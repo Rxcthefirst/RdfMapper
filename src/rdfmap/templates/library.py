@@ -58,7 +58,7 @@ class TemplateLibrary:
             name="financial-loans",
             description="Mortgage loans with borrower and property information",
             domain="financial",
-            example_ontology="examples/mortgage/ontology/mortgage.ttl",
+            example_ontology="examples/mortgage/ontology/mortgage_ontology.ttl",
             example_data="examples/mortgage/data/loans.csv",
             template_config={
                 "expected_columns": [

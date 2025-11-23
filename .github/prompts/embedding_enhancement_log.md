@@ -136,7 +136,7 @@ loan term combined= 0.55 phrase= 0.31 token= 0.55
 
 **Full Mapping Generation:**
 ```bash
-rdfmap generate --ontology examples/mortgage/ontology/mortgage.ttl \
+rdfmap generate --ontology examples/mortgage/ontology/mortgage_ontology.ttl \
                 --data examples/mortgage/data/loans.csv \
                 --output test_output.ttl
 ```

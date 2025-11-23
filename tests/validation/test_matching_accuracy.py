@@ -21,7 +21,7 @@ class TestMatchingAccuracy:
         return {
             'name': 'Mortgage Loans',
             'data': Path('examples/mortgage/data/loans.csv'),
-            'ontology': Path('examples/mortgage/ontology/mortgage.ttl'),
+            'ontology': Path('examples/mortgage/ontology/mortgage_ontology.ttl'),
             'expected_matches': {
                 'LoanID': {
                     'property': 'loanNumber',

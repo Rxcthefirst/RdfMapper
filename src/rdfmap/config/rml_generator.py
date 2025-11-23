@@ -106,10 +106,12 @@ class RMLGenerator:
         # Template
         template = sheet.get('subject_template', sheet.get('row_resource', {}).get('iri_template', ''))
         if template:
-            # Substitute base_iri with actual value (not a column reference)
+            # IMPORTANT: Substitute base_iri FIRST, before any bracket conversion
+            # Template might have $(base_iri) OR {base_iri} depending on source
             template = template.replace('$(base_iri)', self.base_uri)
+            template = template.replace('{base_iri}', self.base_uri)
 
-            # Convert $(column) to {column} for RML (only for actual column references)
+            # NOW convert remaining $(column) to {column} for RML
             template = re.sub(r'\$\((\w+)\)', r'{\1}', template)
 
             self.graph.add((sm_node, RR.template, Literal(template)))
@@ -134,6 +136,11 @@ class RMLGenerator:
 
         for column in columns:
             self._add_predicate_object_map(tm_uri, column, sheet)
+
+        # Handle linked objects (object properties)
+        objects = sheet.get('objects', {})
+        for obj_name, obj_config in objects.items():
+            self._add_object_property_map(tm_uri, obj_config, sheet)
 
     def _add_predicate_object_map(self, tm_uri: URIRef, column: Dict[str, Any], sheet: Dict[str, Any]):
         """Add a single predicate-object map."""
@@ -177,6 +184,110 @@ class RMLGenerator:
         # Object property (IRI)
         if column.get('object_property', False):
             self.graph.add((om_node, RR.termType, RR.IRI))
+
+    def _add_object_property_map(self, tm_uri: URIRef, obj_config: Dict[str, Any], sheet: Dict[str, Any]):
+        """Add predicate-object map for a linked object (object property).
+
+        Creates a parent triples map for the linked object with its own
+        subject and properties.
+        """
+        pom_node = BNode()
+        self.graph.add((tm_uri, RR.predicateObjectMap, pom_node))
+
+        # Predicate (the object property linking to the related resource)
+        predicate = obj_config.get('predicate', '')
+        if predicate:
+            predicate_uri = self._expand_uri(predicate, sheet)
+            self.graph.add((pom_node, RR.predicate, predicate_uri))
+
+        # Create UNIQUE parent triples map for THIS linked object
+        obj_name = obj_config.get('name')
+
+        # If no name, derive from class
+        if not obj_name or obj_name == 'object':
+            obj_class = obj_config.get('class', obj_config.get('class_type', ''))
+            if ':' in obj_class:
+                # Extract local name from prefixed class (e.g., "ex:Borrower" → "borrower")
+                obj_name = obj_class.split(':')[1].lower()
+            else:
+                obj_name = 'object'
+
+        parent_tm_uri = URIRef(f"{self.base_uri}{obj_name}Mapping")
+
+        # Object Map with parentTriplesMap reference
+        om_node = BNode()
+        self.graph.add((pom_node, RR.objectMap, om_node))
+        self.graph.add((om_node, RR.parentTriplesMap, parent_tm_uri))
+
+        # Only create the parent TriplesMap if it doesn't exist yet
+        if (parent_tm_uri, RDF.type, RR.TriplesMap) not in self.graph:
+            # Define the parent triples map
+            self.graph.add((parent_tm_uri, RDF.type, RR.TriplesMap))
+
+            # Use same logical source as parent (only ONE)
+            ls_node = BNode()
+            self.graph.add((parent_tm_uri, RML.logicalSource, ls_node))
+
+            source = sheet.get('source', 'data.csv')
+            self.graph.add((ls_node, RML.source, Literal(source)))
+
+            format_type = sheet.get('format', 'csv').lower()
+            ref_formulation = {
+                'csv': QL.CSV,
+                'json': QL.JSONPath,
+                'xml': QL.XPath,
+            }.get(format_type, QL.CSV)
+            self.graph.add((ls_node, RML.referenceFormulation, ref_formulation))
+
+            # Subject map for the linked object (only ONE)
+            parent_sm_node = BNode()
+            self.graph.add((parent_tm_uri, RR.subjectMap, parent_sm_node))
+
+            # IRI template for linked object
+            iri_template = obj_config.get('iri_template', '')
+            if iri_template:
+                # Substitute base_iri with actual value (handle both formats)
+                iri_template = iri_template.replace('$(base_iri)', self.base_uri)
+                iri_template = iri_template.replace('{base_iri}', self.base_uri)
+                # Convert $(column) to {column}
+                iri_template = re.sub(r'\$\((\w+)\)', r'{\1}', iri_template)
+                self.graph.add((parent_sm_node, RR.template, Literal(iri_template)))
+
+            # Class for linked object
+            obj_class = obj_config.get('class', obj_config.get('class_type', ''))
+            if obj_class:
+                class_uri = self._expand_uri(obj_class, sheet)
+                self.graph.add((parent_sm_node, RR['class'], class_uri))
+
+            # Properties of the linked object
+            properties = obj_config.get('properties', [])
+            for prop in properties:
+                self._add_linked_object_property(parent_tm_uri, prop, sheet)
+
+    def _add_linked_object_property(self, parent_tm_uri: URIRef, prop: Dict[str, Any], sheet: Dict[str, Any]):
+        """Add a property to a linked object's parent triples map."""
+        pom_node = BNode()
+        self.graph.add((parent_tm_uri, RR.predicateObjectMap, pom_node))
+
+        # Predicate
+        predicate = prop.get('as', prop.get('as_property', ''))
+        if predicate:
+            predicate_uri = self._expand_uri(predicate, sheet)
+            self.graph.add((pom_node, RR.predicate, predicate_uri))
+
+        # Object Map
+        om_node = BNode()
+        self.graph.add((pom_node, RR.objectMap, om_node))
+
+        # Column reference
+        col_name = prop.get('column', '')
+        if col_name:
+            self.graph.add((om_node, RML.reference, Literal(col_name)))
+
+        # Datatype
+        if 'datatype' in prop:
+            datatype_uri = self._expand_uri(prop['datatype'], sheet)
+            self.graph.add((om_node, RR.datatype, datatype_uri))
 
     def _expand_uri(self, compact_uri: str, sheet: Dict[str, Any]) -> URIRef:
         """Expand compact URI (prefix:localName) to full URI."""

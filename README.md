@@ -145,10 +145,10 @@ rdfmap convert --mapping mapping_config.yaml
 ```bash
 # Convert mortgage loans data to RDF with validation
 rdfmap convert \
-  --ontology examples/mortgage/ontology/mortgage.ttl \
+  --ontology examples/mortgage/ontology/mortgage_ontology.ttl \
   --mapping examples/mortgage/config/mortgage_mapping.yaml \
   --format ttl \
-  --output output/mortgage.ttl \
+  --output output/mortgage_ontology.ttl \
   --validate \
   --report output/validation_report.json
 
@@ -161,7 +161,7 @@ rdfmap convert \
 
 # 🆕 Or auto-generate mapping from ontology + spreadsheet
 rdfmap generate \
-  --ontology examples/mortgage/ontology/mortgage.ttl \
+  --ontology examples/mortgage/ontology/mortgage_ontology.ttl \
   --spreadsheet examples/mortgage/data/loans.csv \
   --output auto_mapping.yaml \
   --export-schema

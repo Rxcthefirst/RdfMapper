@@ -252,7 +252,7 @@ class TestRealWorldWorkflows:
     def test_mortgage_workflow(self):
         """Test mortgage example workflow."""
         mortgage_data = Path("examples/mortgage/data/loans.csv")
-        mortgage_onto = Path("examples/mortgage/ontology/mortgage.ttl")
+        mortgage_onto = Path("examples/mortgage/ontology/mortgage_ontology.ttl")
 
         if not (mortgage_data.exists() and mortgage_onto.exists()):
             pytest.skip("Mortgage example files not found")
