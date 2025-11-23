@@ -247,10 +247,8 @@ class RMLParser:
         template = self.graph.value(subject_map, RR.template)
         if template:
             template_str = str(template)
-            # Convert RML template format {column} to our format $(column)
-            # RML uses {id}, we use $(id)
-            import re
-            template_str = re.sub(r'\{(\w+)\}', r'$(\1)', template_str)
+            # KEEP {column} format - it's used by Python string formatting in graph_builder
+            # Do NOT convert to $(column) - that's only for YARRRML export
             info['template'] = template_str
         else:
             # Try constant
@@ -369,10 +367,8 @@ class RMLParser:
                 # Try template
                 template = self.graph.value(object_map, RR.template)
                 if template:
-                    import re
-                    template_str = str(template)
-                    template_str = re.sub(r'\{(\w+)\}', r'$(\1)', template_str)
-                    mapping['template'] = template_str
+                    # Keep {column} format for Python string formatting
+                    mapping['template'] = str(template)
                 else:
                     return None
 
@@ -427,11 +423,9 @@ class RMLParser:
                 # Try template
                 template = self.graph.value(object_map, RR.template)
                 if template:
-                    import re
-                    template_str = str(template)
-                    template_str = re.sub(r'\{(\w+)\}', r'$(\1)', template_str)
+                    # Keep {column} format for Python string formatting
                     mapping['_column_name'] = f"template_{predicate_uri.split(':')[-1]}"
-                    mapping['template'] = template_str
+                    mapping['template'] = str(template)
                 else:
                     return None
 
