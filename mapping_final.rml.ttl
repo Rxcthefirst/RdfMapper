@@ -1,0 +1,52 @@
+@prefix ex: <https://example.com/mortgage#> .
+@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/loansMapping> a rr:TriplesMap ;
+    rml:logicalSource [ rml:referenceFormulation ql:CSV ;
+            rml:source "examples/mortgage/data/loans.csv" ] ;
+    rr:predicateObjectMap [ rr:objectMap [ rml:reference "Principal" ;
+                    rr:datatype xsd:integer ] ;
+            rr:predicate ex:principalAmount ],
+        [ rr:objectMap [ rr:parentTriplesMap <http://example.org/propertyMapping> ] ;
+            rr:predicate ex:collateralProperty ],
+        [ rr:objectMap [ rml:reference "InterestRate" ;
+                    rr:datatype xsd:decimal ] ;
+            rr:predicate ex:interestRate ],
+        [ rr:objectMap [ rml:reference "LoanID" ;
+                    rr:datatype xsd:string ] ;
+            rr:predicate ex:loanNumber ],
+        [ rr:objectMap [ rml:reference "LoanTerm" ;
+                    rr:datatype xsd:integer ] ;
+            rr:predicate ex:loanTerm ],
+        [ rr:objectMap [ rml:reference "Status" ;
+                    rr:datatype xsd:string ] ;
+            rr:predicate ex:loanStatus ],
+        [ rr:objectMap [ rml:reference "OriginationDate" ;
+                    rr:datatype xsd:date ] ;
+            rr:predicate ex:originationDate ],
+        [ rr:objectMap [ rr:parentTriplesMap <http://example.org/borrowerMapping> ] ;
+            rr:predicate ex:hasBorrower ] ;
+    rr:subjectMap [ rr:class ex:MortgageLoan ;
+            rr:template "http://example.org/mortgage_loan/{LoanID}" ] .
+
+<http://example.org/borrowerMapping> a rr:TriplesMap ;
+    rml:logicalSource [ rml:referenceFormulation ql:CSV ;
+            rml:source "examples/mortgage/data/loans.csv" ] ;
+    rr:predicateObjectMap [ rr:objectMap [ rml:reference "BorrowerName" ;
+                    rr:datatype xsd:string ] ;
+            rr:predicate ex:borrowerName ] ;
+    rr:subjectMap [ rr:class ex:Borrower ;
+            rr:template "http://example.org/borrower/{BorrowerID}" ] .
+
+<http://example.org/propertyMapping> a rr:TriplesMap ;
+    rml:logicalSource [ rml:referenceFormulation ql:CSV ;
+            rml:source "examples/mortgage/data/loans.csv" ] ;
+    rr:predicateObjectMap [ rr:objectMap [ rml:reference "PropertyAddress" ;
+                    rr:datatype xsd:string ] ;
+            rr:predicate ex:propertyAddress ] ;
+    rr:subjectMap [ rr:class ex:Property ;
+            rr:template "http://example.org/property/{PropertyID}" ] .
+
