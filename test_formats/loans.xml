@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<loans>
+  <loan>
+    <LoanID>L-001</LoanID>
+    <BorrowerID>B-001</BorrowerID>
+    <BorrowerName>Alice Johnson</BorrowerName>
+    <PropertyID>P-001</PropertyID>
+    <PropertyAddress>123 Oak St</PropertyAddress>
+    <Principal>250000</Principal>
+    <InterestRate>0.0425</InterestRate>
+    <OriginationDate>2023-01-15</OriginationDate>
+    <LoanTerm>360</LoanTerm>
+    <Status>Active</Status>
+  </loan>
+  <loan>
+    <LoanID>L-002</LoanID>
+    <BorrowerID>B-002</BorrowerID>
+    <BorrowerName>Bob Smith</BorrowerName>
+    <PropertyID>P-002</PropertyID>
+    <PropertyAddress>456 Elm Ave</PropertyAddress>
+    <Principal>350000</Principal>
+    <InterestRate>0.0525</InterestRate>
+    <OriginationDate>2023-03-20</OriginationDate>
+    <LoanTerm>240</LoanTerm>
+    <Status>Active</Status>
+  </loan>
+  <loan>
+    <LoanID>L-003</LoanID>
+    <BorrowerID>B-003</BorrowerID>
+    <BorrowerName>Carol Lee</BorrowerName>
+    <PropertyID>P-003</PropertyID>
+    <PropertyAddress>789 Pine Rd</PropertyAddress>
+    <Principal>180000</Principal>
+    <InterestRate>0.0375</InterestRate>
+    <OriginationDate>2023-05-10</OriginationDate>
+    <LoanTerm>300</LoanTerm>
+    <Status>Paid Off</Status>
+  </loan>
+</loans>

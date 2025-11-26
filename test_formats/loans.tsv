@@ -1,0 +1,4 @@
+LoanID	BorrowerID	BorrowerName	PropertyID	PropertyAddress	Principal	InterestRate	OriginationDate	LoanTerm	Status
+L-001	B-001	Alice Johnson	P-001	123 Oak St	250000	0.0425	2023-01-15	360	Active
+L-002	B-002	Bob Smith	P-002	456 Elm Ave	350000	0.0525	2023-03-20	240	Active
+L-003	B-003	Carol Lee	P-003	789 Pine Rd	180000	0.0375	2023-05-10	300	Paid Off

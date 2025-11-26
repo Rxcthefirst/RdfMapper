@@ -1,0 +1,250 @@
+[
+  {
+    "applicationId": "APP-2024-001",
+    "submittedDate": "2024-01-15",
+    "status": "approved",
+    "loanDetails": {
+      "requestedAmount": 450000,
+      "loanTerm": 360,
+      "interestRate": 4.25,
+      "loanType": "conventional",
+      "purpose": "purchase"
+    },
+    "property": {
+      "propertyId": "PROP-12345",
+      "address": {
+        "street": "123 Oak Street",
+        "city": "Portland",
+        "state": "OR",
+        "zipCode": "97201",
+        "country": "USA"
+      },
+      "details": {
+        "propertyType": "single-family",
+        "yearBuilt": 1995,
+        "squareFeet": 2400,
+        "bedrooms": 4,
+        "bathrooms": 2.5
+      },
+      "appraisal": {
+        "appraisedValue": 485000,
+        "appraisalDate": "2024-01-20",
+        "appraiser": {
+          "name": "Jane Smith",
+          "licenseNumber": "APR-98765"
+        }
+      }
+    },
+    "borrowers": [
+      {
+        "borrowerId": "BOR-001",
+        "borrowerType": "primary",
+        "personalInfo": {
+          "firstName": "John",
+          "lastName": "Anderson",
+          "dateOfBirth": "1985-03-15",
+          "ssn": "XXX-XX-1234",
+          "maritalStatus": "married"
+        },
+        "contactInfo": {
+          "email": "john.anderson@email.com",
+          "phone": {
+            "home": "503-555-0100",
+            "mobile": "503-555-0101"
+          },
+          "currentAddress": {
+            "street": "456 Elm Ave",
+            "city": "Portland",
+            "state": "OR",
+            "zipCode": "97202"
+          }
+        },
+        "employment": {
+          "current": {
+            "employer": "Tech Corp Inc",
+            "position": "Senior Software Engineer",
+            "startDate": "2018-06-01",
+            "annualIncome": 125000,
+            "employmentType": "full-time",
+            "contact": {
+              "phone": "503-555-0200",
+              "supervisor": "Mike Johnson"
+            }
+          },
+          "history": [
+            {
+              "employer": "StartUp LLC",
+              "position": "Software Developer",
+              "startDate": "2015-01-15",
+              "endDate": "2018-05-31",
+              "annualIncome": 85000
+            }
+          ]
+        },
+        "financials": {
+          "income": {
+            "base": 125000,
+            "bonus": 15000,
+            "other": 5000
+          },
+          "assets": [
+            {
+              "type": "checking",
+              "institution": "First Bank",
+              "accountNumber": "****1234",
+              "balance": 45000
+            },
+            {
+              "type": "401k",
+              "institution": "Retirement Fund Inc",
+              "accountNumber": "****5678",
+              "balance": 180000
+            }
+          ],
+          "liabilities": [
+            {
+              "type": "auto-loan",
+              "creditor": "Auto Finance Co",
+              "balance": 18000,
+              "monthlyPayment": 450
+            }
+          ]
+        },
+        "creditReport": {
+          "score": 760,
+          "reportDate": "2024-01-10",
+          "bureau": "TransUnion"
+        }
+      },
+      {
+        "borrowerId": "BOR-002",
+        "borrowerType": "co-borrower",
+        "personalInfo": {
+          "firstName": "Sarah",
+          "lastName": "Anderson",
+          "dateOfBirth": "1987-07-22",
+          "ssn": "XXX-XX-5678",
+          "maritalStatus": "married"
+        },
+        "contactInfo": {
+          "email": "sarah.anderson@email.com",
+          "phone": {
+            "mobile": "503-555-0102"
+          }
+        },
+        "employment": {
+          "current": {
+            "employer": "Healthcare Partners",
+            "position": "Registered Nurse",
+            "startDate": "2016-09-01",
+            "annualIncome": 85000,
+            "employmentType": "full-time"
+          }
+        },
+        "financials": {
+          "income": {
+            "base": 85000,
+            "bonus": 5000,
+            "other": 0
+          },
+          "assets": [
+            {
+              "type": "savings",
+              "institution": "First Bank",
+              "balance": 35000
+            }
+          ]
+        },
+        "creditReport": {
+          "score": 745,
+          "reportDate": "2024-01-10",
+          "bureau": "Equifax"
+        }
+      }
+    ],
+    "documents": [
+      {
+        "documentId": "DOC-001",
+        "type": "paystub",
+        "borrowerId": "BOR-001",
+        "uploadDate": "2024-01-12",
+        "verified": true
+      },
+      {
+        "documentId": "DOC-002",
+        "type": "tax-return",
+        "borrowerId": "BOR-001",
+        "year": 2023,
+        "uploadDate": "2024-01-13",
+        "verified": true
+      }
+    ],
+    "underwriting": {
+      "underwriterId": "UW-123",
+      "underwriterName": "Lisa Chen",
+      "reviewDate": "2024-01-25",
+      "decision": "approved",
+      "conditions": [
+        {
+          "conditionId": "COND-001",
+          "description": "Provide final verification of employment",
+          "status": "satisfied"
+        }
+      ],
+      "notes": "Strong application with excellent credit and stable employment"
+    }
+  },
+  {
+    "applicationId": "APP-2024-002",
+    "submittedDate": "2024-02-01",
+    "status": "pending",
+    "loanDetails": {
+      "requestedAmount": 325000,
+      "loanTerm": 300,
+      "interestRate": 4.5,
+      "loanType": "FHA",
+      "purpose": "refinance"
+    },
+    "property": {
+      "propertyId": "PROP-67890",
+      "address": {
+        "street": "789 Pine Road",
+        "city": "Seattle",
+        "state": "WA",
+        "zipCode": "98101"
+      },
+      "details": {
+        "propertyType": "condo",
+        "yearBuilt": 2010,
+        "squareFeet": 1800,
+        "bedrooms": 3,
+        "bathrooms": 2
+      }
+    },
+    "borrowers": [
+      {
+        "borrowerId": "BOR-003",
+        "borrowerType": "primary",
+        "personalInfo": {
+          "firstName": "Michael",
+          "lastName": "Chen",
+          "dateOfBirth": "1990-11-03",
+          "ssn": "XXX-XX-9012"
+        },
+        "employment": {
+          "current": {
+            "employer": "Design Studio",
+            "position": "Creative Director",
+            "startDate": "2020-03-01",
+            "annualIncome": 95000,
+            "employmentType": "full-time"
+          }
+        },
+        "creditReport": {
+          "score": 720,
+          "reportDate": "2024-02-01"
+        }
+      }
+    ]
+  }
+]

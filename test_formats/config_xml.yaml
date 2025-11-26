@@ -1,0 +1,8 @@
+options:
+  on_error: report
+  skip_empty_values: true
+  chunk_size: 1000
+  output_format: ttl
+
+mapping:
+  file: mapping_xml.rml.ttl
