@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { Box, Typography, Button, Stack, Divider, LinearProgress, Alert, Paper, Chip } from '@mui/material'
+import { Box, Typography, Button, Stack, Divider, LinearProgress, Alert, Paper, Chip, Tabs, Tab, Stepper, Step, StepLabel, StepContent, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../services/api'
 // Add new imports for controls
@@ -13,6 +13,11 @@ import ValidationDashboard from '../components/ValidationDashboard'
 import ManualMappingModal from '../components/ManualMappingModal'
 import OntologyGraphMini from '../components/OntologyGraphMini'
 import OntologyGraphModal from '../components/OntologyGraphModal'
+import MappingPreview from '../components/MappingPreview'
+import NestedEntityMappingPreview from '../components/NestedEntityMappingPreview'
+import AddNestedEntityModal from '../components/AddNestedEntityModal'
+import ComprehensiveMappingTable, { MappingRow } from '../components/ComprehensiveMappingTable'
+import EnhancedMappingModal from '../components/EnhancedMappingModal'
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>()
@@ -26,6 +31,17 @@ export default function ProjectDetail() {
 
   const [format, setFormat] = useState('turtle')
   const [validateOutput, setValidateOutput] = useState(true)
+  const [mappingFormat, setMappingFormat] = useState('inline') // NEW: v2 mapping format
+  const [mappingTab, setMappingTab] = useState('view') // NEW: 'view' or 'generate'
+
+  // Stepper state
+  const [activeStep, setActiveStep] = useState(0)
+
+  // Config options state
+  const [chunkSize, setChunkSize] = useState(10000)
+  const [onError, setOnError] = useState('report')
+  const [skipEmptyValues, setSkipEmptyValues] = useState(true)
+  const [aggregateDuplicates, setAggregateDuplicates] = useState(true)
 
   const [evidenceOpen, setEvidenceOpen] = useState(false)
   const [selectedMatch, setSelectedMatch] = useState<EvidenceMatchDetail | null>(null)
@@ -35,6 +51,14 @@ export default function ProjectDetail() {
   const [manualCurrentProp, setManualCurrentProp] = useState<string | null>(null)
 
   const [graphOpen, setGraphOpen] = useState(false)
+  const [dataPreviewOpen, setDataPreviewOpen] = useState(false)
+  const [mappingPreviewOpen, setMappingPreviewOpen] = useState(false)
+  const [skosPreviewOpen, setSkosPreviewOpen] = useState(false)
+  const [shapesPreviewOpen, setShapesPreviewOpen] = useState(false)
+  const [addNestedEntityOpen, setAddNestedEntityOpen] = useState(false)
+  const [enhancedMappingOpen, setEnhancedMappingOpen] = useState(false)
+  const [selectedMappingRow, setSelectedMappingRow] = useState<MappingRow | null>(null)
+  const [parentEntityIndexForNested, setParentEntityIndexForNested] = useState(0)
   const [refreshKey, setRefreshKey] = useState(0) // Force re-render after manual overrides
 
   const preview = useQuery({
@@ -110,12 +134,40 @@ export default function ProjectDetail() {
     onError: (e:any) => setError('SKOS upload failed: ' + e.message)
   })
 
+  const uploadExistingMapping = useMutation({
+    mutationFn: async () => {
+      const input = document.getElementById('existing-mapping-file') as HTMLInputElement
+      if (!input?.files?.length) throw new Error('Select a mapping file')
+      const file = input.files[0]
+      return api.uploadExistingMapping(projectId, file, {
+        chunk_size: chunkSize,
+        on_error: onError,
+        skip_empty_values: skipEmptyValues,
+        aggregate_duplicates: aggregateDuplicates
+      })
+    },
+    onSuccess: (data) => {
+      setSuccess(`${data.format} mapping imported! Config created automatically.`)
+      setError(null)
+      mappingYamlQuery.refetch()
+      projectQuery.refetch()
+    },
+    onError: (e:any) => setError('Import failed: ' + e.message)
+  })
+
   const mappingYamlQuery = useQuery({
     queryKey: ['mapping-yaml', projectId],
     queryFn: () => api.fetchMappingYaml(projectId),
     enabled: !!projectId,
     retry: 1,
     refetchOnMount: 'always',
+  })
+
+  const mappingPreview = useQuery({
+    queryKey: ['mappingPreview', projectId],
+    queryFn: () => api.getMappingPreview(projectId, 100),
+    enabled: !!projectId && !!mappingYamlQuery.data,
+    retry: 1,
   })
 
   const existingMappingQuery = useQuery({
@@ -135,15 +187,20 @@ export default function ProjectDetail() {
   })
 
   const generate = useMutation({
-    mutationFn: () => api.generateMappings(projectId, { use_semantic: true, min_confidence: 0.5 }),
+    mutationFn: () => api.generateMappings(projectId, {
+      use_semantic: true,
+      min_confidence: 0.5,
+      output_format: mappingFormat
+    }),
     onSuccess: (data) => {
       console.log('Mappings generated:', data)
       const summaryStats = data.mapping_summary?.statistics || {}
       const reportStats = data.alignment_report?.statistics || {}
       const stats = (summaryStats.mapped_columns ? summaryStats : reportStats)
-      setSuccess(`Mappings generated! ${stats.mapped_columns || 0}/${stats.total_columns || 0} columns mapped (${stats.mapping_rate ? stats.mapping_rate.toFixed(1) : 0}% ).`)
+      const formatLabel = mappingFormat === 'inline' ? 'v2 inline' : mappingFormat === 'rml/ttl' ? 'v2 + RML Turtle' : mappingFormat === 'rml/xml' ? 'v2 + RML RDF/XML' : 'v2 + YARRRML'
+      setSuccess(`Mappings generated (${formatLabel})! ${stats.mapped_columns || 0}/${stats.total_columns || 0} columns mapped (${stats.mapping_rate ? stats.mapping_rate.toFixed(1) : 0}% ).`)
       setError(null)
-      setMappingInfo({ stats, sheets: data.mapping_summary?.sheets || [], raw: data.mapping_config, matchDetails: data.match_details || [] })
+      setMappingInfo({ stats, sheets: data.mapping_summary?.sheets || [], raw: data.mapping_config, matchDetails: data.match_details || [], format: data.output_format })
       mappingYamlQuery.refetch()
     },
     onError: (err: any) => {
@@ -302,17 +359,31 @@ export default function ProjectDetail() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        Project Detail
-      </Typography>
+      {/* Project Header */}
+      <Paper sx={{ p: 3, mb: 3, bgcolor: 'primary.dark', color: 'white' }}>
+        <Typography variant="h4" gutterBottom>
+          {projectQuery.data?.name || 'Project Detail'}
+        </Typography>
+        {projectQuery.data?.description && (
+          <Typography variant="body1" sx={{ opacity: 0.9 }}>
+            {projectQuery.data.description}
+          </Typography>
+        )}
+        <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+          <Chip
+            label={`ID: ${projectId}`}
+            size="small"
+            sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
+          />
+          <Chip
+            label={projectQuery.data?.status || 'active'}
+            size="small"
+            color="success"
+          />
+        </Stack>
+      </Paper>
 
-      {/* Status strip */}
-      <Stack direction="row" spacing={1} sx={{ mb:2, flexWrap:'wrap' }}>
-        <Chip label={projectQuery.data?.data_file ? 'Data: uploaded' : 'Data: missing'} color={projectQuery.data?.data_file ? 'success' : 'default'} size="small" />
-        <Chip label={projectQuery.data?.ontology_file ? 'Ontology: uploaded' : 'Ontology: missing'} color={projectQuery.data?.ontology_file ? 'success' : 'default'} size="small" />
-        {convertSync.data?.triple_count && <Chip label={`Last convert: ${convertSync.data.triple_count} triples`} color="info" size="small" />}
-      </Stack>
-
+      {/* Alerts */}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
@@ -325,594 +396,819 @@ export default function ProjectDetail() {
         </Alert>
       )}
 
-      <Stack spacing={3}>
-        {/* Step 1: Upload Files */}
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Step 1: Upload Files
-          </Typography>
-          <Stack spacing={2}>
-            <Box>
-              <input type="file" id="data-file" accept=".csv,.parquet,.json" />
-              <Button
-                variant="outlined"
-                onClick={() => uploadData.mutate()}
-                disabled={uploadData.isPending}
-                sx={{ ml: 2 }}
-              >
-                {uploadData.isPending ? 'Uploading...' : 'Upload Data'}
-              </Button>
-            </Box>
-            <Box>
-              <input type="file" id="ont-file" accept=".ttl,.rdf,.owl" />
-              <Button
-                variant="outlined"
-                onClick={() => uploadOntology.mutate()}
-                disabled={uploadOntology.isPending}
-                sx={{ ml: 2 }}
-              >
-                {uploadOntology.isPending ? 'Uploading...' : 'Upload Ontology'}
-              </Button>
-            </Box>
-            {(uploadData.isPending || uploadOntology.isPending) && <LinearProgress />}
-          </Stack>
-        </Paper>
+      {/* Stepper Workflow */}
+      <Paper sx={{ p: 3 }}>
+        <Stepper activeStep={activeStep} orientation="vertical">
 
-        {/* Knowledge Inputs */}
-        <Paper sx={{ p:3 }}>
-          <Typography variant="h6" gutterBottom>Knowledge Inputs</Typography>
-          <Stack direction={{ xs:'column', sm:'row' }} spacing={3} alignItems="flex-start" sx={{ mb:2 }}>
-            <Box>
-              <Typography variant="subtitle2">Ontology</Typography>
-              <Typography variant="body2" color={projectQuery.data?.ontology_file ? 'success.main' : 'text.secondary'}>
-                {projectQuery.data?.ontology_file ? 'Uploaded' : 'Missing'}
+          {/* STEP 1: Load Data */}
+          <Step>
+            <StepLabel>
+              <Typography variant="h6">Load Data & Configuration</Typography>
+            </StepLabel>
+            <StepContent>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Upload required files and configure processing options
               </Typography>
-              <Box sx={{ mt:1 }}>
-                <input type="file" id="ont-file-2" accept=".ttl,.rdf,.owl" />
-                <Button size="small" startIcon={<CloudUploadIcon />} sx={{ ml:1 }} variant="outlined" onClick={async()=>{
-                  const input = document.getElementById('ont-file-2') as HTMLInputElement
-                  if (!input?.files?.[0]) { setError('Select an ontology file'); return }
-                  await api.uploadOntology(projectId, input.files[0])
-                  setSuccess('Ontology uploaded!')
-                  projectQuery.refetch()
-                }}>Upload</Button>
-              </Box>
-            </Box>
-            <Divider orientation="vertical" flexItem sx={{ display:{ xs:'none', sm:'block' } }} />
-            <Box>
-              <Typography variant="subtitle2">SKOS Vocabularies</Typography>
-              <Typography variant="body2" color={(projectQuery.data?.config?.skos_files?.length||0) > 0 ? 'success.main' : 'text.secondary'}>
-                {(projectQuery.data?.config?.skos_files?.length||0) > 0 ? `${projectQuery.data.config.skos_files.length} file(s)` : 'None'}
-              </Typography>
-              <Box sx={{ mt:1 }}>
-                <input type="file" id="skos-file" accept=".ttl,.rdf,.owl,.trig,.n3" />
-                <Button size="small" startIcon={<CloudUploadIcon />} sx={{ ml:1 }} variant="outlined" onClick={()=> uploadSkos.mutate()}>Upload</Button>
-              </Box>
-            </Box>
-            <Divider orientation="vertical" flexItem sx={{ display:{ xs:'none', sm:'block' } }} />
-            <Box>
-              <Typography variant="subtitle2">SHACL Shapes</Typography>
-              <Typography variant="body2" color={projectQuery.data?.config?.shapes_file ? 'success.main' : 'text.secondary'}>
-                {projectQuery.data?.config?.shapes_file ? 'Uploaded' : 'None'}
-              </Typography>
-              <Box sx={{ mt:1 }}>
-                <input type="file" id="shapes-file" accept=".ttl,.rdf,.owl,.trig,.n3" />
-                <Button size="small" startIcon={<CloudUploadIcon />} sx={{ ml:1 }} variant="outlined" onClick={()=> uploadShapes.mutate()}>Upload</Button>
-              </Box>
-            </Box>
-            <Box>
-              <Typography variant="subtitle2">Reasoning</Typography>
-              <Typography variant="body2" color={(projectQuery.data?.config?.enable_reasoning)?'success.main':'text.secondary'}>
-                {(projectQuery.data?.config?.enable_reasoning)?'Enabled':'Disabled'}
-              </Typography>
-              <Stack direction="row" spacing={1} sx={{ mt:1 }}>
-                <Button size="small" variant="outlined" onClick={async()=>{
-                  try {
-                    const en = !(projectQuery.data?.config?.enable_reasoning)
-                    await api.updateSettings(projectId,{ enable_reasoning: en })
-                    setSuccess(`Reasoning ${en? 'enabled':'disabled'}`)
-                    projectQuery.refetch()
-                  } catch(e:any){ setError(e.message) }
-                }}>{(projectQuery.data?.config?.enable_reasoning)?'Disable':'Enable'}</Button>
-              </Stack>
-            </Box>
-          </Stack>
-          {(projectQuery.data?.config?.skos_files?.length||0) > 0 && (
-            <Box sx={{ mt:1 }}>
-              <Typography variant="caption" color="text.secondary">SKOS files:</Typography>
-              <Stack direction="row" spacing={1} sx={{ flexWrap:'wrap', mt:1 }}>
-                {projectQuery.data.config.skos_files.map((p:string)=>{
-                  const short = p.split('/').pop()
-                  return <Chip key={p} label={short} onDelete={async()=>{try{await api.removeSkos(projectId,p); projectQuery.refetch(); setSuccess(`Removed ${short}`)}catch(e:any){setError(e.message)}}} size="small" />
-                })}
-              </Stack>
-            </Box>
-          )}
-          {projectQuery.data?.config?.shapes_file && (
-            <Box sx={{ mt:1 }}>
-              <Typography variant="caption" color="text.secondary">Shapes file:</Typography>
-              <Chip label={projectQuery.data.config.shapes_file.split('/').pop()} onDelete={async()=>{try{await api.removeShapes(projectId); projectQuery.refetch(); setSuccess('Removed shapes file')}catch(e:any){setError(e.message)}}} size="small" sx={{ ml:1 }} />
-            </Box>
-          )}
-        </Paper>
 
-        {/* Ontology Summary */}
-        {ontology.data && (
-          <Paper sx={{ p:3 }}>
-            <Typography variant="h6" gutterBottom>Ontology Summary</Typography>
-            <Stack direction="row" spacing={4} sx={{ mb:1, alignItems:'center' }}>
-              <Typography variant="body2">Classes: <strong>{ontology.data.total_classes}</strong></Typography>
-              <Typography variant="body2">Properties: <strong>{ontology.data.total_properties}</strong></Typography>
-              <Button size="small" variant="outlined" onClick={()=> setGraphOpen(true)}>View Graph</Button>
-            </Stack>
-            <OntologyGraphMini
-              classes={ontology.data.classes || []}
-              properties={ontology.data.properties || []}
-              onOpenFull={()=> setGraphOpen(true)}
-            />
-            {ontology.data.classes?.length > 0 && (
-              <Box sx={{ mt:2 }}>
-                <Typography variant="subtitle2">Sample Classes</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {ontology.data.classes.slice(0,5).map((c:any)=>c.label || c.uri).join(', ')}
-                </Typography>
-              </Box>
-            )}
-            {ontology.data.properties?.length > 0 && (
-              <Box sx={{ mt:2 }}>
-                <Typography variant="subtitle2">Sample Properties</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {ontology.data.properties.slice(0,5).map((p:any)=>p.label || p.uri).join(', ')}
-                </Typography>
-              </Box>
-            )}
-          </Paper>
-        )}
-        <OntologyGraphModal
-          open={graphOpen}
-          onClose={()=> setGraphOpen(false)}
-          classes={ontology.data?.classes || []}
-          properties={ontology.data?.properties || []}
-        />
+              <Stack spacing={3}>
+                {/* Required Files */}
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                    📁 Required Files
+                  </Typography>
 
-        {/* Step 2: Generate Mappings */}
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Step 2: Generate Mappings (AI-Powered)
-          </Typography>
-          <Button
-            variant="contained"
-            onClick={() => generate.mutate()}
-            disabled={generate.isPending}
-            size="large"
-          >
-            {generate.isPending ? 'Generating with BERT...' : 'Generate Mappings'}
-          </Button>
-          {generate.isPending && (
-            <Box sx={{ mt: 2 }}>
-              <LinearProgress />
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                AI semantic matching in progress... This may take a few seconds.
-              </Typography>
-            </Box>
-          )}
-        </Paper>
+                  <Stack spacing={2}>
+                    {/* Data File */}
+                    <Box>
+                      <Typography variant="subtitle2" gutterBottom>
+                        📊 Data File {!projectQuery.data?.data_file && <Chip label="Required" size="small" color="error" sx={{ ml: 1 }} />}
+                      </Typography>
+                      {projectQuery.data?.data_file ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                          <Chip label={projectQuery.data.data_file.split('/').pop()} color="success" />
+                          <Button size="small" variant="outlined" onClick={() => setDataPreviewOpen(true)}>
+                            Preview
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={async () => {
+                              if (confirm('Delete data file? This cannot be undone.')) {
+                                try {
+                                  await api.deleteDataFile(projectId);
+                                  setSuccess('Data file deleted');
+                                  projectQuery.refetch();
+                                } catch (e: any) {
+                                  setError(`Failed to delete: ${e.message}`);
+                                }
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      ) : (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <input type="file" id="data-file" accept=".csv,.xlsx,.json,.xml" />
+                          <Button
+                            variant="outlined"
+                            onClick={() => uploadData.mutate()}
+                            disabled={uploadData.isPending}
+                            startIcon={<CloudUploadIcon />}
+                          >
+                            Upload
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
 
-        {/* Step 3: Convert to RDF */}
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Step 3: Convert to RDF
-          </Typography>
-          <Stack direction={{ xs:'column', sm:'row' }} spacing={2} sx={{ mb: 2 }}>
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <InputLabel id="format-label">Format</InputLabel>
-              <Select labelId="format-label" label="Format" value={format} onChange={(e)=> setFormat(e.target.value)}>
-                <MenuItem value="turtle">Turtle (.ttl)</MenuItem>
-                <MenuItem value="json-ld">JSON-LD (.jsonld)</MenuItem>
-                <MenuItem value="xml">RDF/XML (.rdf)</MenuItem>
-                <MenuItem value="nt">N-Triples (.nt)</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControlLabel control={<Checkbox checked={validateOutput} onChange={(e)=> setValidateOutput(e.target.checked)} />} label="Validate output" />
-          </Stack>
-          <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={() => convertSync.mutate()}
-              disabled={convertSync.isPending}
-            >
-              {convertSync.isPending ? 'Converting...' : 'Convert (Sync)'}
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => convertAsync.mutate()}
-              disabled={convertAsync.isPending}
-            >
-              {convertAsync.isPending ? 'Queueing...' : 'Convert (Background)'}
-            </Button>
-          </Stack>
+                    {/* Ontology File */}
+                    <Box>
+                      <Typography variant="subtitle2" gutterBottom>
+                        🎯 Ontology File {!projectQuery.data?.ontology_file && <Chip label="Required" size="small" color="error" sx={{ ml: 1 }} />}
+                      </Typography>
+                      {projectQuery.data?.ontology_file ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                          <Chip label={projectQuery.data.ontology_file.split('/').pop()} color="success" />
+                          <Button size="small" variant="outlined" onClick={() => setGraphOpen(true)}>
+                            View Graph
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={async () => {
+                              if (confirm('Delete ontology file? This cannot be undone.')) {
+                                try {
+                                  await api.deleteOntologyFile(projectId);
+                                  setSuccess('Ontology file deleted');
+                                  projectQuery.refetch();
+                                  ontology.refetch();
+                                } catch (e: any) {
+                                  setError(`Failed to delete: ${e.message}`);
+                                }
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      ) : (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <input type="file" id="ont-file" accept=".ttl,.rdf,.owl,.n3" />
+                          <Button
+                            variant="outlined"
+                            onClick={() => uploadOntology.mutate()}
+                            disabled={uploadOntology.isPending}
+                            startIcon={<CloudUploadIcon />}
+                          >
+                            Upload
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
 
-          {(convertSync.isPending || convertAsync.isPending) && <LinearProgress />}
-
-          {jobId && !jobResult && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              Job ID: {jobId} - Polling status every 1.5 seconds...
-            </Alert>
-          )}
-
-          {convertSync.data?.triple_count && (
-            <Alert severity="success" sx={{ mt: 2 }}>
-              ✅ Sync conversion complete: <strong>{convertSync.data.triple_count} triples</strong>
-            </Alert>
-          )}
-
-          {/* Validation results */}
-          {convertSync.data?.validation || convertSync.data?.shacl_validation || convertSync.data?.ontology_structural_validation ? (
-            <ValidationDashboard
-              ontologyValidation={convertSync.data?.validation}
-              shaclValidation={convertSync.data?.shacl_validation}
-              structuralValidation={convertSync.data?.ontology_structural_validation}
-            />
-          ) : null}
-        </Paper>
-
-        {/* Step 4: Download */}
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Step 4: Download RDF Output
-          </Typography>
-          <Button variant="contained" color="success" onClick={download}>
-            Download RDF File
-          </Button>
-        </Paper>
-
-        {/* Data Preview */}
-        {preview.data?.rows && preview.data.rows.length > 0 && (
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Data Preview ({preview.data.showing} rows)
-            </Typography>
-            <Box sx={{ maxHeight: 300, overflow: 'auto', bgcolor: '#f5f5f5', p: 2, borderRadius: 1 }}>
-              <pre style={{ margin: 0, fontSize: '12px' }}>
-                {JSON.stringify(preview.data.rows, null, 2)}
-              </pre>
-            </Box>
-          </Paper>
-        )}
-
-        {/* After Generate: Mapping Summary */}
-        {generate.data?.alignment_report && (
-          <Paper sx={{ p:3 }}>
-            <Typography variant="h6" gutterBottom>Mapping Summary</Typography>
-            <Typography variant="body2" sx={{ mb:2 }}>
-              <strong>
-                Mapped: {generate.data.alignment_report.statistics?.mapped_columns || 0} /
-                Total: {generate.data.alignment_report.statistics?.total_columns || 0}
-                ({(generate.data.alignment_report.statistics?.mapping_success_rate * 100 || 0).toFixed(1)}%)
-              </strong>
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              💡 Unmapped columns can be manually mapped in the Mapping Configuration section below.
-            </Typography>
-          </Paper>
-        )}
-
-        {/* Evidence Drawer */}
-        <EvidenceDrawer
-          open={evidenceOpen}
-          onClose={()=> setEvidenceOpen(false)}
-          matchDetail={selectedMatch}
-          onSwitchToAlternate={(column, newProp)=>{
-            // TODO: Implement switch via API override; for now just notify and close
-            setSuccess(`Switching ${column} to alternate: ${newProp}`)
-            setEvidenceOpen(false)
-          }}
-        />
-
-        {/* Manual Mapping Modal */}
-        <ManualMappingModal
-          open={manualOpen}
-          columnName={manualColumn}
-          currentProperty={manualCurrentProp}
-          properties={(ontology.data?.properties || []).map((p:any)=>({ uri: p.uri, label: p.label, comment: p.comment }))}
-          onClose={()=>{ setManualOpen(false); setManualColumn(null); setManualCurrentProp(null) }}
-          onMap={async (col, propUri)=>{
-            try {
-              await api.overrideMapping(projectId, col, propUri)
-              const propLabel = propUri.split('#').pop()?.split('/').pop() || propUri
-              setSuccess(`Mapping updated: ${col} → ${propLabel}`)
-
-              // Update generate.data to reflect the manual override
-              if (generate.data) {
-                const updatedMatchDetails = generate.data.match_details?.map((detail: any) =>
-                  detail.column_name === col
-                    ? {
-                        ...detail,
-                        matched_property: propUri,
-                        matcher_name: 'ManualOverride',
-                        match_type: 'manual_override',
-                        confidence_score: 1.0,
-                        matched_via: 'User override'
-                      }
-                    : detail
-                ) || []
-
-                // Check if this was an unmapped column
-                const wasUnmapped = generate.data.alignment_report?.unmapped_columns?.some(
-                  (u: any) => u.column_name === col
-                )
-
-                // If it was unmapped, add it to match_details and remove from unmapped
-                if (wasUnmapped) {
-                  updatedMatchDetails.push({
-                    column_name: col,
-                    matched_property: propUri,
-                    matcher_name: 'ManualOverride',
-                    match_type: 'manual_override',
-                    confidence_score: 1.0,
-                    matched_via: 'User override',
-                    evidence: [],
-                    evidence_groups: []
-                  })
-
-                  const updatedUnmapped = generate.data.alignment_report.unmapped_columns.filter(
-                    (u: any) => u.column_name !== col
-                  )
-
-                  const updatedStats = {
-                    ...generate.data.alignment_report.statistics,
-                    mapped_columns: (generate.data.alignment_report.statistics?.mapped_columns || 0) + 1,
-                    mapping_success_rate: ((generate.data.alignment_report.statistics?.mapped_columns || 0) + 1) /
-                                         (generate.data.alignment_report.statistics?.total_columns || 1)
-                  }
-
-                  // Update generate.data with new state
-                  generate.data.alignment_report = {
-                    ...generate.data.alignment_report,
-                    statistics: updatedStats,
-                    unmapped_columns: updatedUnmapped
-                  }
-                }
-
-                generate.data.match_details = updatedMatchDetails
-
-                // Force re-render by incrementing refresh key
-                setRefreshKey(prev => prev + 1)
-              }
-
-            } catch(e:any){
-              setError(`Override failed: ${e.message}`)
-            }
-            setManualOpen(false)
-          }}
-        />
-
-        {/* Mapping Configuration - Enhanced UX */}
-        {generate.data?.alignment_report && (
-          <Paper sx={{ p:3 }} key={`mapping-config-${refreshKey}`}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-              <Box>
-                <Typography variant="h6" gutterBottom>Mapping Configuration</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Review and refine the automated mappings. Click Evidence to understand why each mapping was made, or Change to manually override it.
-                </Typography>
-              </Box>
-              <Button
-                variant="outlined"
-                startIcon={<DownloadIcon />}
-                onClick={async () => {
-                  try {
-                    await api.downloadYARRRML(projectId)
-                    setSuccess('YARRRML downloaded successfully! ⭐')
-                  } catch (e: any) {
-                    setError('YARRRML download failed: ' + e.message)
-                  }
-                }}
-              >
-                Download YARRRML
-              </Button>
-            </Stack>
-
-            {/* Simplified Pipeline Performance Alert */}
-            {generate.data.alignment_report.statistics?.matchers_fired_avg &&
-             generate.data.alignment_report.statistics.matchers_fired_avg < 3 && (
-              <Alert severity="success" sx={{ mb: 2 }}>
-                <strong>Optimized Performance:</strong> Using simplified pipeline with {
-                  generate.data.alignment_report.statistics.matchers_fired_avg.toFixed(1)
-                } matchers avg (5x faster, better accuracy!)
-              </Alert>
-            )}
-
-            {/* Statistics as Chips */}
-            <Stack direction="row" spacing={2} sx={{ mb: 3, flexWrap: 'wrap' }}>
-              <Chip
-                label={`Success Rate: ${(generate.data.alignment_report.statistics?.mapping_success_rate*100 || 0).toFixed(1)}%`}
-                color="primary"
-                variant="outlined"
-              />
-              <Chip
-                label={`Avg Confidence: ${(generate.data.alignment_report.statistics?.average_confidence || 0).toFixed(2)}`}
-                color="success"
-                variant="outlined"
-              />
-              <Chip
-                label={`Mapped: ${generate.data.alignment_report.statistics?.mapped_columns || 0}`}
-                color="success"
-              />
-              <Chip
-                label={`Unmapped: ${generate.data.alignment_report.unmapped_columns?.length || 0}`}
-                color={generate.data.alignment_report.unmapped_columns?.length > 0 ? 'warning' : 'default'}
-              />
-              {/* NEW: Simplified Pipeline Metrics */}
-              {generate.data.alignment_report.statistics?.matchers_fired_avg && (
-                <Chip
-                  label={`Matchers Fired: ${generate.data.alignment_report.statistics.matchers_fired_avg.toFixed(1)}`}
-                  color={generate.data.alignment_report.statistics.matchers_fired_avg < 5 ? 'success' : 'info'}
-                  variant="outlined"
-                />
-              )}
-              {generate.data.alignment_report.statistics?.matchers_fired_avg &&
-               generate.data.alignment_report.statistics.matchers_fired_avg < 5 && (
-                <Chip
-                  label="Simplified Pipeline ⚡"
-                  color="success"
-                  size="small"
-                />
-              )}
-            </Stack>
-
-            {/* Mapped Columns Table */}
-            {generate.data.match_details && generate.data.match_details.length > 0 && (
-              <Box sx={{ mb: 4 }}>
-                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
-                  ✅ Mapped Columns
-                </Typography>
-                <TableContainer sx={{ maxHeight: 400, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Column</TableCell>
-                        <TableCell>Mapped Property</TableCell>
-                        <TableCell>Confidence</TableCell>
-                        <TableCell>Matcher</TableCell>
-                        <TableCell align="right">Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {generate.data.match_details.map((detail: any, idx: number) => {
-                        const confidence = detail.confidence_score || 0;
-                        const confidenceColor = confidence >= 0.8 ? 'success' : confidence >= 0.6 ? 'warning' : 'error';
-                        const propLabel = detail.matched_property?.split('#').pop()?.split('/').pop() || detail.matched_property;
-
-                        return (
-                          <TableRow key={idx} hover>
-                            <TableCell><strong>{detail.column_name}</strong></TableCell>
-                            <TableCell>{propLabel}</TableCell>
-                            <TableCell>
-                              <Chip
-                                label={`${(confidence * 100).toFixed(0)}%`}
-                                size="small"
-                                color={confidenceColor}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="caption">{detail.matcher_name}</Typography>
-                            </TableCell>
-                            <TableCell align="right">
-                              <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  onClick={() => {
-                                    setSelectedMatch(detail as EvidenceMatchDetail);
-                                    setEvidenceOpen(true);
-                                  }}
-                                >
-                                  Evidence
-                                </Button>
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  onClick={() => {
-                                    setManualColumn(detail.column_name);
-                                    setManualCurrentProp(detail.matched_property);
-                                    setManualOpen(true);
-                                  }}
-                                >
-                                  Change
-                                </Button>
-                              </Stack>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
-
-            {/* Unmapped Columns Section */}
-            {generate.data.alignment_report.unmapped_columns && generate.data.alignment_report.unmapped_columns.length > 0 && (
-              <Box sx={{ mb: 4 }}>
-                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
-                  ⚠️ Unmapped Columns
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  These columns could not be automatically mapped. Click "Map Now" to manually map them, or skip them if they're not needed in your RDF output.
-                </Typography>
-                <TableContainer sx={{ maxHeight: 400, border: '2px solid', borderColor: 'warning.light', borderRadius: 1 }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Column</TableCell>
-                        <TableCell>Sample Values</TableCell>
-                        <TableCell>Type</TableCell>
-                        <TableCell align="right">Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {generate.data.alignment_report.unmapped_columns.map((unmapped: any, idx: number) => (
-                        <TableRow key={idx} hover>
-                          <TableCell><strong>{unmapped.column_name}</strong></TableCell>
-                          <TableCell>
-                            <Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-                              {unmapped.sample_values?.slice(0, 3).join(', ') || 'N/A'}
-                              {(unmapped.sample_values?.length || 0) > 3 && '...'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
+                    {/* Optional: Import Existing Mapping */}
+                    <Box>
+                      <Typography variant="subtitle2" gutterBottom>
+                        📦 Existing Mapping <Chip label="Optional" size="small" sx={{ ml: 1 }} />
+                      </Typography>
+                      {mappingYamlQuery.data ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                          <Chip label="✓ Mapping loaded" color="info" />
+                          {mappingPreview.data && (
                             <Chip
-                              label={unmapped.inferred_datatype?.replace('xsd:', '') || 'unknown'}
+                              label={`${mappingPreview.data.format} format`}
                               size="small"
                               variant="outlined"
                             />
-                          </TableCell>
-                          <TableCell align="right">
-                            <Button
-                              size="small"
-                              variant="contained"
-                              color="primary"
-                              onClick={() => {
-                                setManualColumn(unmapped.column_name);
-                                setManualCurrentProp(null);
-                                setManualOpen(true);
-                              }}
-                            >
-                              Map Now
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
+                          )}
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => setMappingPreviewOpen(true)}
+                          >
+                            Preview Mapping
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={async () => {
+                              if (confirm('Delete mapping file? This cannot be undone.')) {
+                                try {
+                                  await api.deleteMappingFile(projectId);
+                                  setSuccess('Mapping file deleted');
+                                  mappingYamlQuery.refetch();
+                                } catch (e: any) {
+                                  setError(`Failed to delete: ${e.message}`);
+                                }
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      ) : (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <input type="file" id="existing-mapping-file" accept=".ttl,.rdf,.yaml,.yml" />
+                          <Button
+                            variant="outlined"
+                            onClick={() => uploadExistingMapping.mutate()}
+                            startIcon={<CloudUploadIcon />}
+                          >
+                            Import RML/YARRRML
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
+                  </Stack>
+                </Paper>
 
-            <Divider sx={{ my: 3 }} />
+                {/* Optional Knowledge Files */}
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                    📚 Optional Knowledge Files
+                  </Typography>
 
-            {/* Export Options */}
-            <Stack direction="row" spacing={2} justifyContent="space-between" alignItems="center">
-              <Typography variant="body2" color="text.secondary">
-                Export configuration or reports for documentation
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <Button variant="outlined" size="small" startIcon={<DownloadIcon />} href={`/api/files/${projectId}/alignment_report.json`}>
-                  Report JSON
-                </Button>
-                <Button variant="outlined" size="small" startIcon={<DownloadIcon />} href={`/api/files/${projectId}/alignment_report.html`}>
-                  Report HTML
-                </Button>
-                <Button variant="outlined" size="small" startIcon={<DownloadIcon />} href={`/api/mappings/${projectId}?raw=true`}>
-                  Config YAML
-                </Button>
+                  <Stack spacing={2}>
+                    {/* SKOS Vocabularies */}
+                    <Box>
+                      <Typography variant="subtitle2" gutterBottom>
+                        📖 SKOS Vocabularies <Chip label="Optional" size="small" sx={{ ml: 1 }} />
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                        Add controlled vocabularies for enhanced semantic alignment
+                      </Typography>
+                      {projectQuery.data?.config?.skos_files && projectQuery.data.config.skos_files.length > 0 ? (
+                        <Stack spacing={1}>
+                          {projectQuery.data.config.skos_files.map((file: string, idx: number) => (
+                            <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                              <Chip label={file.split('/').pop()} color="success" size="small" />
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => {
+                                  // TODO: Add SKOS preview functionality
+                                  setSkosPreviewOpen(true);
+                                }}
+                              >
+                                Preview
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                onClick={async () => {
+                                  if (confirm('Delete this SKOS file?')) {
+                                    try {
+                                      await api.removeSkos(projectId, file);
+                                      setSuccess('SKOS file deleted');
+                                      projectQuery.refetch();
+                                    } catch (e: any) {
+                                      setError(`Failed to delete: ${e.message}`);
+                                    }
+                                  }
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            </Box>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <input type="file" id="skos-file" accept=".ttl,.rdf,.owl,.n3" />
+                          <Button
+                            variant="outlined"
+                            onClick={() => uploadSkos.mutate()}
+                            disabled={uploadSkos.isPending}
+                            startIcon={<CloudUploadIcon />}
+                          >
+                            Upload SKOS
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
+
+                    {/* SHACL Shapes */}
+                    <Box>
+                      <Typography variant="subtitle2" gutterBottom>
+                        ✓ SHACL Shapes <Chip label="Optional" size="small" sx={{ ml: 1 }} />
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                        Add validation constraints for data quality checking
+                      </Typography>
+                      {projectQuery.data?.config?.shapes_file ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                          <Chip label={projectQuery.data.config.shapes_file.split('/').pop()} color="success" size="small" />
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => setShapesPreviewOpen(true)}
+                          >
+                            Preview
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={async () => {
+                              if (confirm('Delete SHACL shapes file?')) {
+                                try {
+                                  await api.removeShapes(projectId);
+                                  setSuccess('Shapes file deleted');
+                                  projectQuery.refetch();
+                                } catch (e: any) {
+                                  setError(`Failed to delete: ${e.message}`);
+                                }
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Box>
+                      ) : (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <input type="file" id="shapes-file" accept=".ttl,.rdf,.owl,.n3" />
+                          <Button
+                            variant="outlined"
+                            onClick={() => uploadShapes.mutate()}
+                            disabled={uploadShapes.isPending}
+                            startIcon={<CloudUploadIcon />}
+                          >
+                            Upload Shapes
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
+                  </Stack>
+                </Paper>
               </Stack>
-            </Stack>
-          </Paper>
-        )}
-      </Stack>
+
+              <Box sx={{ mt: 2 }}>
+                <Button
+                  variant="contained"
+                  onClick={() => setActiveStep(1)}
+                  disabled={!projectQuery.data?.data_file || !projectQuery.data?.ontology_file}
+                >
+                  Continue to Mapping
+                </Button>
+              </Box>
+            </StepContent>
+          </Step>
+
+          {/* STEP 2: Mapping Review */}
+          <Step>
+            <StepLabel>
+              <Typography variant="h6">Mapping Review & Generation</Typography>
+            </StepLabel>
+            <StepContent>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Generate or review mappings between your data and ontology
+              </Typography>
+
+              {mappingYamlQuery.data ? (
+                <Box>
+                  <Alert severity="success" sx={{ mb: 2 }}>
+                    ✓ Mapping available! Review and edit as needed.
+                  </Alert>
+
+                  <ComprehensiveMappingTable
+                    mappingYaml={mappingYamlQuery.data}
+                    projectId={projectId}
+                    onEditMapping={(row) => {
+                      setSelectedMappingRow(row);
+                      setEnhancedMappingOpen(true);
+                    }}
+                  />
+
+                  <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+                    <Button variant="outlined" startIcon={<DownloadIcon />} onClick={async () => {
+                      try {
+                        await api.downloadRML(projectId, 'turtle')
+                        setSuccess('RML downloaded')
+                      } catch (e: any) {
+                        setError(e.message)
+                      }
+                    }}>
+                      Download RML
+                    </Button>
+                    <Button variant="outlined" startIcon={<DownloadIcon />} onClick={async () => {
+                      try {
+                        await api.downloadYARRRML(projectId)
+                        setSuccess('YARRRML downloaded')
+                      } catch (e: any) {
+                        setError(e.message)
+                      }
+                    }}>
+                      Download YARRRML
+                    </Button>
+                  </Stack>
+                </Box>
+              ) : (
+                <Box>
+                  <FormControl size="small" sx={{ mb: 2, minWidth: 250 }}>
+                    <InputLabel>Mapping Format</InputLabel>
+                    <Select value={mappingFormat} onChange={(e) => setMappingFormat(e.target.value)}>
+                      <MenuItem value="inline">v2 Inline (Recommended)</MenuItem>
+                      <MenuItem value="rml/ttl">v2 + RML Turtle</MenuItem>
+                      <MenuItem value="rml/xml">v2 + RML RDF/XML</MenuItem>
+                      <MenuItem value="yarrrml">v2 + YARRRML</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <Box>
+                    <Button
+                      variant="contained"
+                      onClick={() => generate.mutate()}
+                      disabled={generate.isPending}
+                    >
+                      {generate.isPending ? 'Generating...' : 'Generate Mappings with AI'}
+                    </Button>
+                  </Box>
+                </Box>
+              )}
+
+              <Box sx={{ mt: 2 }}>
+                <Button onClick={() => setActiveStep(0)} sx={{ mr: 1 }}>
+                  Back
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={() => setActiveStep(2)}
+                  disabled={!mappingYamlQuery.data}
+                >
+                  Continue to Analysis
+                </Button>
+              </Box>
+            </StepContent>
+          </Step>
+
+          {/* STEP 3: Analysis */}
+          <Step>
+            <StepLabel>
+              <Typography variant="h6">Data & Mapping Analysis</Typography>
+            </StepLabel>
+            <StepContent>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Analyze mapping coverage and data quality
+              </Typography>
+
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="subtitle1" gutterBottom>📊 Coverage Analysis</Typography>
+                <Alert severity="info">
+                  Analysis features coming soon: Column coverage, property coverage, data quality metrics
+                </Alert>
+                {/* TODO: Add analysis components */}
+              </Paper>
+
+              <Box sx={{ mt: 2 }}>
+                <Button onClick={() => setActiveStep(1)} sx={{ mr: 1 }}>
+                  Back
+                </Button>
+                <Button variant="contained" onClick={() => setActiveStep(3)}>
+                  Continue to Conversion
+                </Button>
+              </Box>
+            </StepContent>
+          </Step>
+
+          {/* STEP 4: Convert */}
+          <Step>
+            <StepLabel>
+              <Typography variant="h6">Convert to RDF</Typography>
+            </StepLabel>
+            <StepContent>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Transform your data to RDF format
+              </Typography>
+
+              <Stack spacing={2}>
+                <FormControl size="small" sx={{ maxWidth: 200 }}>
+                  <InputLabel>Output Format</InputLabel>
+                  <Select value={format} onChange={(e) => setFormat(e.target.value)}>
+                    <MenuItem value="turtle">Turtle (.ttl)</MenuItem>
+                    <MenuItem value="json-ld">JSON-LD (.jsonld)</MenuItem>
+                    <MenuItem value="xml">RDF/XML (.rdf)</MenuItem>
+                    <MenuItem value="nt">N-Triples (.nt)</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <Stack direction="row" spacing={2}>
+                  <Button
+                    variant="contained"
+                    onClick={() => convertSync.mutate()}
+                    disabled={convertSync.isPending}
+                  >
+                    {convertSync.isPending ? 'Converting...' : 'Convert (Sync)'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => convertAsync.mutate()}
+                    disabled={convertAsync.isPending}
+                  >
+                    Convert (Background)
+                  </Button>
+                </Stack>
+
+                {convertSync.isPending && <LinearProgress />}
+
+                {convertSync.data && (
+                  <Alert severity="success">
+                    ✓ Converted! Generated {convertSync.data.triple_count} triples
+                    <Button size="small" onClick={download} sx={{ ml: 2 }}>
+                      Download RDF
+                    </Button>
+                  </Alert>
+                )}
+              </Stack>
+
+              <Box sx={{ mt: 2 }}>
+                <Button onClick={() => setActiveStep(2)} sx={{ mr: 1 }}>
+                  Back
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={() => setActiveStep(4)}
+                  disabled={!convertSync.data}
+                >
+                  Continue to Validation
+                </Button>
+              </Box>
+            </StepContent>
+          </Step>
+
+          {/* STEP 5: Validation */}
+          <Step>
+            <StepLabel>
+              <Typography variant="h6">Validation & Quality Check</Typography>
+            </StepLabel>
+            <StepContent>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Validate RDF output against SHACL shapes
+              </Typography>
+
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="subtitle1" gutterBottom>✓ Validation Results</Typography>
+                <Alert severity="info">
+                  SHACL validation features coming soon
+                </Alert>
+                {/* TODO: Add validation dashboard */}
+              </Paper>
+
+              <Box sx={{ mt: 2 }}>
+                <Button onClick={() => setActiveStep(3)} sx={{ mr: 1 }}>
+                  Back
+                </Button>
+                <Button variant="contained" color="success" onClick={() => setActiveStep(0)}>
+                  Complete
+                </Button>
+              </Box>
+            </StepContent>
+          </Step>
+        </Stepper>
+      </Paper>
+
+      {/* Modals */}
+      <OntologyGraphModal
+        open={graphOpen}
+        onClose={() => setGraphOpen(false)}
+        classes={ontology.data?.classes || []}
+        properties={ontology.data?.properties || []}
+      />
+
+      <ManualMappingModal
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        columnName={manualColumn || ''}
+        currentProperty={manualCurrentProp || ''}
+        properties={ontology.data?.properties || []}
+        onMap={async (column, property) => {
+          try {
+            await api.overrideMapping(projectId, column, property)
+            setSuccess(`Mapping updated: ${column} → ${property}`)
+            mappingYamlQuery.refetch()
+            setManualOpen(false)
+          } catch (e: any) {
+            setError(e.message)
+          }
+        }}
+      />
+
+      <EvidenceDrawer
+        open={evidenceOpen}
+        onClose={() => setEvidenceOpen(false)}
+        matchDetail={selectedMatch}
+      />
+
+      {/* Data Preview Dialog */}
+      <Dialog
+        open={dataPreviewOpen}
+        onClose={() => setDataPreviewOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Data Preview - {projectQuery.data?.data_file?.split('/').pop()}
+        </DialogTitle>
+        <DialogContent dividers>
+          {preview.isLoading ? (
+            <Box sx={{ p: 3, textAlign: 'center' }}>
+              <LinearProgress />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                Loading data preview...
+              </Typography>
+            </Box>
+          ) : preview.error ? (
+            <Alert severity="error">
+              Failed to load preview: {(preview.error as any)?.message || 'Unknown error'}
+            </Alert>
+          ) : preview.data?.rows && preview.data.rows.length > 0 ? (
+            <Box>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Showing first {preview.data.showing} rows of {preview.data.total_rows || 'unknown total'} rows
+              </Alert>
+              <Box sx={{ maxHeight: 400, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <pre style={{ margin: 0, padding: 16, fontSize: '12px', fontFamily: 'monospace' }}>
+                  {JSON.stringify(preview.data.rows, null, 2)}
+                </pre>
+              </Box>
+              {preview.data.columns && preview.data.columns.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Columns ({preview.data.columns.length}):
+                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                    {preview.data.columns.map((col: any) => {
+                      // Handle both string columns and object columns with 'name' property
+                      const colName = typeof col === 'string' ? col : col?.name || String(col);
+                      return (
+                        <Chip key={colName} label={colName} size="small" variant="outlined" />
+                      );
+                    })}
+                  </Stack>
+                </Box>
+              )}
+            </Box>
+          ) : (
+            <Alert severity="warning">
+              No data available to preview
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDataPreviewOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Mapping Preview Dialog */}
+      <Dialog
+        open={mappingPreviewOpen}
+        onClose={() => setMappingPreviewOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          Mapping Preview
+          {mappingPreview.data && (
+            <Chip
+              label={mappingPreview.data.format}
+              size="small"
+              color="primary"
+              sx={{ ml: 2 }}
+            />
+          )}
+        </DialogTitle>
+        <DialogContent dividers>
+          {mappingPreview.isLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 4 }}>
+              <CircularProgress />
+              <Typography sx={{ ml: 2 }}>Loading mapping preview...</Typography>
+            </Box>
+          ) : mappingPreview.error ? (
+            <Alert severity="error">
+              Failed to load mapping preview: {(mappingPreview.error as any)?.message || 'Unknown error'}
+            </Alert>
+          ) : mappingPreview.data ? (
+            <Box>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Showing first {mappingPreview.data.showing_lines} lines of {mappingPreview.data.total_lines} total
+                {mappingPreview.data.is_truncated && ' (truncated)'}
+              </Alert>
+              <Box
+                sx={{
+                  maxHeight: 600,
+                  overflow: 'auto',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  bgcolor: '#f5f5f5'
+                }}
+              >
+                <pre style={{
+                  margin: 0,
+                  padding: 16,
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all'
+                }}>
+                  {mappingPreview.data.preview}
+                </pre>
+              </Box>
+            </Box>
+          ) : (
+            <Alert severity="warning">No mapping preview available</Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMappingPreviewOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* SKOS Preview Dialog */}
+      <Dialog
+        open={skosPreviewOpen}
+        onClose={() => setSkosPreviewOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>SKOS Vocabulary Preview</DialogTitle>
+        <DialogContent dividers>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            SKOS vocabularies provide controlled terms for semantic alignment
+          </Alert>
+          <Box
+            sx={{
+              maxHeight: 600,
+              overflow: 'auto',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              bgcolor: '#f5f5f5'
+            }}
+          >
+            <pre style={{
+              margin: 0,
+              padding: 16,
+              fontSize: '12px',
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap'
+            }}>
+              {/* TODO: Fetch and display SKOS content */}
+              Preview not yet implemented. File uploaded successfully.
+            </pre>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSkosPreviewOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* SHACL Shapes Preview Dialog */}
+      <Dialog
+        open={shapesPreviewOpen}
+        onClose={() => setShapesPreviewOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>SHACL Shapes Preview</DialogTitle>
+        <DialogContent dividers>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            SHACL shapes define validation constraints for your data
+          </Alert>
+          <Box
+            sx={{
+              maxHeight: 600,
+              overflow: 'auto',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              bgcolor: '#f5f5f5'
+            }}
+          >
+            <pre style={{
+              margin: 0,
+              padding: 16,
+              fontSize: '12px',
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap'
+            }}>
+              {/* TODO: Fetch and display Shapes content */}
+              Preview not yet implemented. File uploaded successfully.
+            </pre>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShapesPreviewOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add Nested Entity Modal */}
+      <AddNestedEntityModal
+        open={addNestedEntityOpen}
+        onClose={() => setAddNestedEntityOpen(false)}
+        parentEntityIndex={parentEntityIndexForNested}
+        ontologyClasses={ontology.data?.classes || []}
+        ontologyProperties={ontology.data?.properties || []}
+        dataColumns={preview.data?.columns?.map((col: any) => typeof col === 'string' ? col : col?.name) || []}
+        onSave={async (data) => {
+          try {
+            await api.addNestedEntity(
+              projectId,
+              parentEntityIndexForNested,
+              data.joinColumn,
+              data.targetClass,
+              data.iriTemplate,
+              data.properties
+            );
+            setSuccess('Nested entity added successfully!');
+            mappingYamlQuery.refetch();
+            setAddNestedEntityOpen(false);
+          } catch (e: any) {
+            setError(`Failed to add nested entity: ${e.message}`);
+          }
+        }}
+      />
+
+      {/* Enhanced Mapping Modal with Graph */}
+      <EnhancedMappingModal
+        open={enhancedMappingOpen}
+        onClose={() => setEnhancedMappingOpen(false)}
+        projectId={projectId}
+        mappingRow={selectedMappingRow}
+        ontologyClasses={ontology.data?.classes || []}
+        ontologyProperties={ontology.data?.properties || []}
+        onSave={async (newPropertyUri) => {
+          if (!selectedMappingRow) return;
+
+          try {
+            // Determine if it's a simple override or nested override
+            if (selectedMappingRow.mappingType === 'nested-data' &&
+                selectedMappingRow.parentEntityIndex !== undefined &&
+                selectedMappingRow.nestedEntityIndex !== undefined) {
+              // Nested property override
+              await api.overrideNestedMapping(
+                projectId,
+                selectedMappingRow.parentEntityIndex,
+                selectedMappingRow.nestedEntityIndex,
+                selectedMappingRow.columnName,
+                newPropertyUri
+              );
+            } else {
+              // Simple property override
+              await api.overrideMapping(projectId, selectedMappingRow.columnName, newPropertyUri);
+            }
+
+            setSuccess(`Mapping updated: ${selectedMappingRow.columnName} → ${newPropertyUri.split('#').pop()?.split('/').pop()}`);
+            mappingYamlQuery.refetch();
+          } catch (e: any) {
+            setError(`Failed to update mapping: ${e.message}`);
+          }
+        }}
+      />
     </Box>
   )
 }

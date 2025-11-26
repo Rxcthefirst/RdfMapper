@@ -2,6 +2,7 @@
 
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
+from datetime import datetime, date
 import os
 import json
 from difflib import SequenceMatcher
@@ -1160,9 +1161,16 @@ class MappingGenerator:
         if not self.mapping:
             raise ValueError("No mapping generated. Call generate() first.")
         
+        # Custom encoder to handle datetime objects
+        class DateTimeEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, (datetime, date)):
+                    return obj.isoformat()
+                return super().default(obj)
+
         with open(output_file, 'w') as f:
-            json.dump(self.mapping, f, indent=2)
-    
+            json.dump(self.mapping, f, indent=2, cls=DateTimeEncoder)
+
     def get_json_schema(self) -> Dict[str, Any]:
         """
         Generate JSON Schema from the Pydantic mapping configuration model.
@@ -1545,8 +1553,15 @@ class MappingGenerator:
         if not self.alignment_report:
             raise ValueError("No alignment report available. Call generate_with_alignment_report() first.")
 
+        # Custom encoder to handle datetime objects
+        class DateTimeEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, (datetime, date)):
+                    return obj.isoformat()
+                return super().default(obj)
+
         with open(output_file, 'w') as f:
-            json.dump(self.alignment_report.to_dict(), f, indent=2)
+            json.dump(self.alignment_report.to_dict(), f, indent=2, cls=DateTimeEncoder)
 
     def export_alignment_html(self, output_file: str):
         """Export alignment report to HTML file.

@@ -48,6 +48,21 @@ def init(
         "-t",
         help="Use a pre-built template (e.g., financial-loans, healthcare-patients). Use 'rdfmap templates' to list available templates.",
     ),
+    existing_mapping: Optional[Path] = typer.Option(
+        None,
+        "--existing-mapping",
+        "-e",
+        help="Path to existing RML or YARRRML file to wrap in v2 config",
+        exists=True,
+        dir_okay=False,
+    ),
+    ontology: Optional[Path] = typer.Option(
+        None,
+        "--ontology",
+        help="Path to ontology file (for validation setup)",
+        exists=True,
+        dir_okay=False,
+    ),
 ):
     """
     🎯 Interactive configuration wizard with automatic mapping generation.
@@ -60,6 +75,13 @@ def init(
 
     The wizard uses AI-powered semantic matching to achieve 95%+ success rates.
 
+    **Import Existing Mappings:**
+    If you already have an RML or YARRRML file, use --existing-mapping to create
+    a v2 config wrapper:
+      rdfmap init --existing-mapping my_mapping.rml.ttl --output config.yaml
+      rdfmap init --existing-mapping my_mapping.yarrrml --output config.yaml
+
+    **Use Templates:**
     You can also use pre-built templates for common domains:
       - financial-loans, financial-transactions, financial-accounts
       - healthcare-patients, healthcare-visits
@@ -68,11 +90,120 @@ def init(
       - hr-employees, hr-departments
 
     Examples:
+        # Interactive wizard
         rdfmap init --output my_mapping.yaml
+
+        # Import existing RML
+        rdfmap init --existing-mapping mapping.rml.ttl -o config.yaml
+
+        # Import existing YARRRML
+        rdfmap init --existing-mapping mapping.yarrrml -o config.yaml
+
+        # Use template
         rdfmap init --template financial-loans --output loans_mapping.yaml
-        rdfmap convert --mapping my_mapping.yaml --validate
     """
     try:
+        # Handle existing mapping import
+        if existing_mapping:
+            console.print("[bold cyan]📦 Importing Existing Mapping[/bold cyan]\n")
+            console.print(f"Mapping file: [white]{existing_mapping}[/white]")
+
+            # Detect format
+            import yaml
+            suffix = existing_mapping.suffix.lower()
+            is_rml = suffix in ['.ttl', '.rdf', '.nt', '.n3', '.xml']
+            is_yarrrml = suffix in ['.yaml', '.yml']
+
+            if not is_rml and not is_yarrrml:
+                console.print(f"[yellow]⚠ Unknown format for {existing_mapping}[/yellow]")
+                console.print("Assuming YARRRML (YAML) format")
+                is_yarrrml = True
+
+            # Get relative path from output location
+            config_path = Path(output) if output else Path("mapping_config.yaml")
+            mapping_rel_path = existing_mapping.name  # Just filename if in same dir
+
+            # Try to make relative path if possible
+            try:
+                mapping_rel_path = str(existing_mapping.relative_to(config_path.parent))
+            except ValueError:
+                # Not relative, use absolute or just filename
+                if existing_mapping.parent == config_path.parent:
+                    mapping_rel_path = existing_mapping.name
+                else:
+                    mapping_rel_path = str(existing_mapping)
+
+            # Collect optional settings
+            ontology_path = None
+            if ontology:
+                try:
+                    ontology_path = str(ontology.relative_to(config_path.parent))
+                except ValueError:
+                    ontology_path = str(ontology)
+            else:
+                console.print("\n[yellow]💡 Tip: Add --ontology to configure validation[/yellow]")
+
+            # Create v2 config
+            v2_config = {
+                'options': {
+                    'on_error': 'report',
+                    'skip_empty_values': True,
+                    'chunk_size': 1000,
+                    'aggregate_duplicates': True,
+                    'output_format': 'ttl'
+                },
+                'mapping': {
+                    'file': mapping_rel_path
+                }
+            }
+
+            if ontology_path:
+                v2_config['imports'] = [ontology_path]
+
+            # Ask about validation
+            if ontology:
+                enable_validation = typer.confirm("Enable SHACL validation?", default=False)
+                if enable_validation:
+                    shapes_file = typer.prompt("Path to SHACL shapes file (optional)", default="")
+                    if shapes_file:
+                        v2_config['validation'] = {
+                            'shacl': {
+                                'enabled': True,
+                                'shapes_file': shapes_file,
+                                'inference': 'none'
+                            }
+                        }
+
+            # Write config
+            with open(config_path, 'w') as f:
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+                f.write("# RDFMap v2 Configuration (Imported Existing Mapping)\n")
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+                f.write("#\n")
+                f.write(f"# Created by: rdfmap init --existing-mapping\n")
+                if is_rml:
+                    f.write(f"# Format: v2 + External RML\n")
+                else:
+                    f.write(f"# Format: v2 + External YARRRML\n")
+                f.write(f"# Mapping file: {mapping_rel_path}\n")
+                f.write("#\n")
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n\n")
+                yaml.dump(v2_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+            console.print(f"\n[bold green]✅ Configuration created![/bold green]")
+            console.print(f"\nGenerated: [white]{config_path}[/white]")
+            console.print(f"References: [white]{mapping_rel_path}[/white]")
+
+            console.print("\n[bold]Next steps:[/bold]")
+            console.print(f"  1. [cyan]Review the configuration:[/cyan]")
+            console.print(f"     [white]{config_path}[/white]")
+            console.print(f"\n  2. [cyan]Test the mapping:[/cyan]")
+            console.print(f"     [white]rdfmap convert --mapping {config_path} --limit 10 --dry-run[/white]")
+            console.print(f"\n  3. [cyan]Process your data:[/cyan]")
+            console.print(f"     [white]rdfmap convert --mapping {config_path} --output data.ttl[/white]")
+
+            return
+
         # Check if template is requested
         if template:
             from ..templates import get_template_library
@@ -284,11 +415,20 @@ def convert(
             for sheet in config.sheets:
                 console.print(f"[blue]Processing sheet: {sheet.name}[/blue]")
 
+                # Prepare parser arguments
+                parser_kwargs = {
+                    'delimiter': config.options.delimiter,
+                    'has_header': config.options.header,
+                }
+
+                # Add iterator for XML/JSON if specified
+                if sheet.iterator:
+                    parser_kwargs['row_xpath'] = sheet.iterator
+
                 # Create parser
                 parser = create_parser(
                     Path(sheet.source),
-                    delimiter=config.options.delimiter,
-                    has_header=config.options.header,
+                    **parser_kwargs
                 )
 
                 if verbose:
@@ -387,11 +527,11 @@ def convert(
         
         # Write output (skip if already written in streaming mode)
         if not dry_run and output and not nt_context_manager:
-            # Use provided format or default to ttl
-            output_format = format or "ttl"
-            
-            console.print(f"[blue]Writing {output_format.upper()} to {output}...[/blue]")
-            serialize_graph(graph, output_format, output)
+            # Use command-line format, config format, or default to ttl
+            final_output_format = format or config.options.output_format or "ttl"
+
+            console.print(f"[blue]Writing {final_output_format.upper()} to {output}...[/blue]")
+            serialize_graph(graph, final_output_format, output)
             console.print("[green]Output written successfully[/green]")
         elif not dry_run and output and nt_context_manager:
             console.print("[green]NT output already written via streaming[/green]")
@@ -692,10 +832,10 @@ def generate(
         help="Target ontology class (URI or label). If omitted, will auto-detect.",
     ),
     format: str = typer.Option(
-        "rml",
+        "inline",
         "--format",
         "-f",
-        help="Output format: rml (W3C standard), yarrrml (human-friendly), yaml (internal), json (internal)",
+        help="Mapping format: inline (v2 structure), rml/ttl (external RML Turtle), rml/xml (external RML RDF/XML), yarrrml (external YARRRML), yaml (v1 internal - deprecated), json (v1 internal - deprecated)",
     ),
     analyze_only: bool = typer.Option(
         False,
@@ -738,24 +878,37 @@ def generate(
     - Detect potential linked objects and nested structures
 
     Output Formats:
-    - rml: W3C RML standard (Turtle) - for interoperability with RMLMapper, Morph-KGC
-    - yarrrml: YARRRML format (YAML) - human-friendly, easy to edit
-    - yaml: Internal format (YAML) - backwards compatible
-    - json: Internal format (JSON) - backwards compatible
 
-    The generated mapping can be used directly with 'rdfmap convert' or
-    with other RML tools like RMLMapper.
+    NEW (v2 structure - RECOMMENDED):
+    - inline: v2 config with mapping inline (default)
+      Creates a single YAML file with clean two-section structure
+
+    - rml/ttl: v2 config + external RML Turtle file
+      Creates config.yaml + mapping.rml.ttl (standards-compliant)
+
+    - rml/xml: v2 config + external RML RDF/XML file
+      Creates config.yaml + mapping.rml.rdf (XML-based tools)
+
+    - yarrrml: v2 config + external YARRRML file
+      Creates config.yaml + mapping.yaml (human-friendly)
+
+    OLD (v1 structure - DEPRECATED):
+    - yaml: Old internal format (backward compatibility only)
+    - json: Old internal format (backward compatibility only)
 
     Examples:
-        # Generate RML (recommended for interoperability)
-        rdfmap generate --ontology ont.ttl --data data.csv -f rml -o map.rml.ttl
+        # Generate v2 inline config (recommended for new projects)
+        rdfmap generate --ontology ont.ttl --data data.csv -f inline -o config.yaml
 
-        # Generate YARRRML (for manual editing)
-        rdfmap generate --ontology ont.ttl --data data.csv -f yarrrml -o map.yaml
+        # Generate v2 config + external RML Turtle
+        rdfmap generate --ontology ont.ttl --data data.csv -f rml/ttl -o config.yaml
+
+        # Generate v2 config + external YARRRML
+        rdfmap generate --ontology ont.ttl --data data.csv -f yarrrml -o config.yaml
 
         # With alignment report
-        rdfmap generate --ontology ont.ttl --data data.csv -f rml \
-            -o map.rml.ttl --alignment-report
+        rdfmap generate --ontology ont.ttl --data data.csv -f inline \
+            -o config.yaml --alignment-report
     """
     try:
         console.print("[blue]Analyzing ontology...[/blue]")
@@ -852,18 +1005,88 @@ def generate(
         # Save to file in requested format
         format_lower = format.lower()
 
-        if format_lower == "rml":
-            # Generate RML format
+        if format_lower == "inline":
+            # NEW v2 structure: inline mapping
+            from ..config.v2_generator import internal_to_v2_config
+
+            v2_config = internal_to_v2_config(
+                mapping,
+                base_iri=base_iri,
+                alignment_report=report.dict() if report else None,
+                imports=[str(ontology)] if ontology else imports,
+                validation_enabled=False,  # User can enable manually
+                shapes_file=None
+            )
+
+            import yaml
+            with open(output, 'w') as f:
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+                f.write("# RDFMap Configuration - v2 Structure (Inline Mapping)\n")
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+                f.write("#\n")
+                f.write("# Generated by rdfmap generate command\n")
+                f.write(f"# Ontology: {ontology.name}\n")
+                f.write(f"# Data: {data.name}\n")
+                f.write("#\n")
+                f.write("# This uses the NEW v2 config structure with:\n")
+                f.write("#   - Clear separation: pipeline config vs mapping definition\n")
+                f.write("#   - RML-aligned terminology: sources, entity, properties, predicate\n")
+                f.write("#   - Format-agnostic: works for CSV, JSON, XML, databases\n")
+                f.write("#\n")
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n\n")
+                yaml.dump(v2_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+            console.print(f"\n[green]✓ v2 config (inline mapping) written to {output}[/green]")
+
+        elif format_lower in ["rml/ttl", "rml/xml"]:
+            # NEW v2 structure: external RML file
             from ..config.rml_generator import internal_to_rml
+            from ..config.v2_generator import internal_to_v2_with_external
+
+            # Generate external RML file
+            rml_format = 'xml' if format_lower == "rml/xml" else 'turtle'
+            rml_ext = '.rml.rdf' if format_lower == "rml/xml" else '.rml.ttl'
+            rml_file = output.parent / f"{output.stem}{rml_ext}"
+
             rml_content, alignment_json = internal_to_rml(
                 mapping,
-                report.dict() if report else None
+                report.dict() if report else None,
+                format=rml_format
             )
-            with open(output, 'w') as f:
-                f.write(rml_content)
-            console.print(f"\n[green]✓ RML mapping written to {output}[/green]")
 
-            # Save alignment report separately if it exists
+            with open(rml_file, 'w') as f:
+                f.write(rml_content)
+
+            # Generate v2 config pointing to RML file
+            relative_rml_path = rml_file.name  # Just filename for same directory
+
+            v2_config = internal_to_v2_with_external(
+                mapping,
+                base_iri=base_iri,
+                mapping_file_path=relative_rml_path,
+                alignment_report=report.dict() if report else None,
+                imports=[str(ontology)] if ontology else imports,
+                validation_enabled=False,
+                shapes_file=None
+            )
+
+            import yaml
+            with open(output, 'w') as f:
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+                f.write("# RDFMap Configuration - v2 Structure (External RML)\n")
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+                f.write(f"#\n")
+                f.write("# Generated by rdfmap generate command\n")
+                f.write(f"# Mapping file: {relative_rml_path}\n")
+                f.write("#\n")
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n\n")
+                yaml.dump(v2_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+            format_name = "RDF/XML" if format_lower == "rml/xml" else "Turtle"
+            console.print(f"\n[green]✓ v2 config written to {output}[/green]")
+            console.print(f"[green]✓ RML mapping ({format_name}) written to {rml_file}[/green]")
+
+            # Save alignment report if exists
             if alignment_json:
                 json_report_path = output.parent / f"{output.stem}_alignment.json"
                 with open(json_report_path, 'w') as f:
@@ -871,25 +1094,65 @@ def generate(
                 console.print(f"[green]✓ Alignment report (JSON): {json_report_path}[/green]")
 
         elif format_lower == "yarrrml":
-            # Generate YARRRML format
+            # NEW v2 structure: external YARRRML file
             from ..config.yarrrml_generator import internal_to_yarrrml
+            from ..config.v2_generator import internal_to_v2_with_external
+
+            # Generate external YARRRML file
+            yarrrml_file = output.parent / f"{output.stem}_mapping.yaml"
+
             yarrrml_dict = internal_to_yarrrml(
                 mapping,
                 report.dict() if report else None
             )
+
             import yaml
+            with open(yarrrml_file, 'w') as f:
+                yaml.dump(yarrrml_dict, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+            # Generate v2 config pointing to YARRRML file
+            relative_yarrrml_path = yarrrml_file.name
+
+            v2_config = internal_to_v2_with_external(
+                mapping,
+                base_iri=base_iri,
+                mapping_file_path=relative_yarrrml_path,
+                alignment_report=report.dict() if report else None,
+                imports=[str(ontology)] if ontology else imports,
+                validation_enabled=False,
+                shapes_file=None
+            )
+
             with open(output, 'w') as f:
-                yaml.dump(yarrrml_dict, f, default_flow_style=False, sort_keys=False)
-            console.print(f"\n[green]✓ YARRRML mapping written to {output}[/green]")
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+                f.write("# RDFMap Configuration - v2 Structure (External YARRRML)\n")
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+                f.write(f"#\n")
+                f.write("# Generated by rdfmap generate command\n")
+                f.write(f"# Mapping file: {relative_yarrrml_path}\n")
+                f.write("#\n")
+                f.write("# ════════════════════════════════════════════════════════════════════════════════\n\n")
+                yaml.dump(v2_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+            console.print(f"\n[green]✓ v2 config written to {output}[/green]")
+            console.print(f"[green]✓ YARRRML mapping written to {yarrrml_file}[/green]")
 
         elif format_lower == "json":
-            # Internal JSON format
+            # OLD v1 structure - Internal JSON format (DEPRECATED)
+            console.print("[yellow]⚠️  Using deprecated v1 structure. Consider using -f inline for new projects.[/yellow]")
             generator.save_json(str(output))
-            console.print(f"\n[green]✓ Mapping configuration written to {output}[/green]")
-        else:
-            # Internal YAML format (default for backwards compatibility)
+            console.print(f"\n[green]✓ Mapping configuration (v1 JSON) written to {output}[/green]")
+
+        elif format_lower in ["yaml", "yml"]:
+            # OLD v1 structure - Internal YAML format (DEPRECATED)
+            console.print("[yellow]⚠️  Using deprecated v1 structure. Consider using -f inline for new projects.[/yellow]")
             generator.save_yaml(str(output))
-            console.print(f"\n[green]✓ Mapping configuration written to {output}[/green]")
+            console.print(f"\n[green]✓ Mapping configuration (v1 YAML) written to {output}[/green]")
+
+        else:
+            console.print(f"[red]✗ Unknown format: {format}[/red]")
+            console.print("Valid formats: inline, rml/ttl, rml/xml, yarrrml, yaml (deprecated), json (deprecated)")
+            raise typer.Exit(1)
 
         # Export and display alignment report if available
         if report and generator.alignment_report:

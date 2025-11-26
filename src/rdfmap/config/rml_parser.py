@@ -163,7 +163,9 @@ class RMLParser:
 
         # Extract predicate-object maps
         po_maps = list(self.graph.objects(triples_map, RR.predicateObjectMap))
-        columns_dict = self._extract_predicate_object_maps_as_dict(po_maps, source_info['columns'])
+        extraction_result = self._extract_predicate_object_maps_with_separation(po_maps, source_info['columns'])
+        columns_dict = extraction_result['data_properties']
+        objects_dict = extraction_result['object_properties']
 
         # Build sheet configuration in internal format
         sheet = {
@@ -175,6 +177,10 @@ class RMLParser:
             },
             'columns': columns_dict  # Dict format, not list!
         }
+
+        # Add objects if any were found
+        if objects_dict:
+            sheet['objects'] = objects_dict
 
         # Add optional fields
         if 'format' in source_info:
@@ -199,6 +205,8 @@ class RMLParser:
             return None
 
         source_str = str(source)
+
+
         info['source'] = source_str
 
         # Extract name from source (filename without extension)
@@ -305,13 +313,19 @@ class RMLParser:
 
         return result
 
-    def _extract_predicate_object_maps_as_dict(
+    def _extract_predicate_object_maps_with_separation(
         self,
         po_maps: List[URIRef],
         columns: List[str]
-    ) -> Dict[str, Dict[str, Any]]:
-        """Extract column mappings from predicate-object maps as dict (column_name -> mapping)."""
-        result = {}
+    ) -> Dict[str, Any]:
+        """
+        Extract column mappings from predicate-object maps, separating data properties and object properties.
+
+        Returns:
+            Dict with 'data_properties' and 'object_properties' keys
+        """
+        data_properties = {}
+        object_properties = {}
 
         for po_map in po_maps:
             # Get predicate
@@ -328,21 +342,82 @@ class RMLParser:
                 obj = self.graph.value(po_map, RR.object)
                 if obj:
                     # Constant value - use property name as key
-                    column_name = f"constant_{len(result)}"
-                    result[column_name] = {
+                    column_name = f"constant_{len(data_properties)}"
+                    data_properties[column_name] = {
                         'as': predicate_uri,
                         'datatype': self._infer_datatype(obj),
                         'default': str(obj),
                     }
                 continue
 
-            # Extract from object map
+            # Check if this is a parent triples map (object property / relationship)
+            parent_triples_map = self.graph.value(object_map, RR.parentTriplesMap)
+            if parent_triples_map:
+                # This is an object property linking to another entity
+                # Extract the target entity's information
+                target_subject_map = self.graph.value(parent_triples_map, RR.subjectMap)
+                if target_subject_map:
+                    target_class = self.graph.value(target_subject_map, RR['class'])
+                    target_template = self.graph.value(target_subject_map, RR.template)
+
+                    if target_class and target_template:
+                        # Create object property in format expected by the LinkedObject model
+                        # Use predicate name as key
+                        obj_key = predicate_uri.split(':')[-1] if ':' in predicate_uri else predicate_uri
+
+                        # Get properties of the linked object from the parent triples map
+                        target_po_maps = list(self.graph.objects(parent_triples_map, RR.predicateObjectMap))
+                        target_properties = []
+                        for target_po in target_po_maps:
+                            target_pred = self.graph.value(target_po, RR.predicate)
+                            target_obj_map = self.graph.value(target_po, RR.objectMap)
+                            if target_pred and target_obj_map:
+                                target_ref = self.graph.value(target_obj_map, RML.reference)
+                                if not target_ref:
+                                    target_ref = self.graph.value(target_obj_map, RR.column)
+                                if target_ref:
+                                    target_datatype = self.graph.value(target_obj_map, RR.datatype)
+                                    prop_mapping = {
+                                        'as': self._compact_uri(str(target_pred)),  # Changed from 'property' to 'as'
+                                        'column': str(target_ref)
+                                    }
+                                    if target_datatype:
+                                        prop_mapping['datatype'] = self._compact_uri(str(target_datatype))
+                                    target_properties.append(prop_mapping)
+
+                        object_properties[obj_key] = {
+                            'predicate': predicate_uri,
+                            'class': self._compact_uri(str(target_class)),
+                            'iri_template': str(target_template),
+                            'properties': target_properties
+                        }
+                continue
+
+            # Extract from object map (data property)
             column_mapping = self._extract_object_map_for_dict(object_map, predicate_uri)
             if column_mapping:
                 column_name = column_mapping.pop('_column_name')
-                result[column_name] = column_mapping
+                data_properties[column_name] = column_mapping
 
-        return result
+        return {
+            'data_properties': data_properties,
+            'object_properties': object_properties
+        }
+
+    def _extract_predicate_object_maps_as_dict(
+        self,
+        po_maps: List[URIRef],
+        columns: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """Extract column mappings from predicate-object maps as dict (column_name -> mapping).
+        DEPRECATED: Use _extract_predicate_object_maps_with_separation instead."""
+        result = self._extract_predicate_object_maps_with_separation(po_maps, columns)
+        # Merge both for backwards compatibility
+        merged = result['data_properties'].copy()
+        # Add object properties with special prefix
+        for key, value in result['object_properties'].items():
+            merged[f'_obj_{key}'] = value
+        return merged
 
     def _extract_object_map(self, object_map: URIRef, predicate_uri: str) -> Optional[Dict[str, Any]]:
         """Extract column mapping from object map (returns list format for backwards compatibility)."""

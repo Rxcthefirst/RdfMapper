@@ -1,0 +1,241 @@
+# Configuration Structure - Visual Comparison
+
+```
+╔══════════════════════════════════════════════════════════════════════════╗
+║                         CURRENT STRUCTURE (Problematic)                   ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ namespaces:                    ❌ RML concept at top level               │
+│   xsd: ...                                                               │
+│   ex: ...                                                                │
+├─────────────────────────────────────────────────────────────────────────┤
+│ defaults:                      ❌ Awkward nesting                        │
+│   base_iri: ...                                                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│ sheets:                        ❌ Spreadsheet-centric terminology        │
+│   - name: loans                ❌ Doesn't work well for JSON/XML         │
+│     source: data.csv           ❌ "source" ambiguous                     │
+│     row_resource:              ❌ "row" implies tabular                  │
+│       class: ex:Loan                                                     │
+│       iri_template: ...                                                  │
+│     columns:                   ❌ "columns" implies tabular              │
+│       Name:                                                              │
+│         as: ex:name            ❌ "as" unclear                           │
+│         datatype: xsd:string                                             │
+│     objects:                   ❌ "objects" vague                        │
+│       borrower: ...                                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│ validation:                    ✅ Good (pipeline config)                 │
+│   shacl: ...                                                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│ options:                       ✅ Good (pipeline config)                 │
+│   on_error: "report"                                                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PROBLEMS:
+  ❌ RML concepts scattered across hierarchy
+  ❌ Pipeline config mixed with mapping definition
+  ❌ Terminology assumes spreadsheets (sheets, rows, columns)
+  ❌ Unclear property names (as, objects)
+  ❌ No clear mental model
+
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                         PROPOSED STRUCTURE (Clean)                        ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ SECTION 1: PIPELINE CONFIGURATION (RDFMap-specific)                     ┃
+┃ Purpose: How to execute the conversion                                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌─────────────────────────────────────────────────────────────────────────┐
+│ validation:                    ✅ Pipeline feature                       │
+│   shacl:                                                                 │
+│     enabled: true                                                        │
+│     shapes_file: shapes.ttl                                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│ options:                       ✅ Pipeline feature                       │
+│   on_error: "report"                                                     │
+│   chunk_size: 1000                                                       │
+│   aggregate_duplicates: true                                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│ imports:                       ✅ Pipeline feature                       │
+│   - ontology.ttl                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ SECTION 2: MAPPING DEFINITION (RML-compatible)                          ┃
+┃ Purpose: What data to transform and how                                 ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┌─────────────────────────────────────────────────────────────────────────┐
+│ mapping:                       ✅ All RML concepts grouped               │
+│   namespaces:                  ✅ RML: prefixes                          │
+│     xsd: ...                                                             │
+│     ex: ...                                                              │
+│                                                                          │
+│   base_iri: ...                ✅ RML: base (not nested)                 │
+│                                                                          │
+│   sources:                     ✅ Format-agnostic (CSV/JSON/XML/DB)      │
+│     - name: loans              ✅ Works for any source                   │
+│       file: data.csv           ✅ Clear file reference                   │
+│       format: csv              ✅ Explicit format                        │
+│                                                                          │
+│       entity:                  ✅ Semantic (not "row_resource")          │
+│         class: ex:Loan         ✅ RML: rr:class                          │
+│         iri_template: ...      ✅ RML: rr:template                       │
+│                                                                          │
+│       properties:              ✅ Format-agnostic (not "columns")        │
+│         Name:                                                            │
+│           predicate: ex:name   ✅ RML terminology (not "as")             │
+│           datatype: xsd:string ✅ RML: rr:datatype                       │
+│                                                                          │
+│       relationships:           ✅ Clear intent (not "objects")           │
+│         - predicate: ex:has... ✅ RML: object property                   │
+│           class: ex:Borrower                                             │
+│           iri_template: ...                                              │
+└─────────────────────────────────────────────────────────────────────────┘
+
+BENEFITS:
+  ✅ Clear two-section structure (pipeline vs mapping)
+  ✅ All RML concepts grouped under mapping:
+  ✅ Format-agnostic terminology (works for JSON/XML/DB)
+  ✅ Better property names (predicate, entity, properties)
+  ✅ Clean mental model: pipeline = how, mapping = what
+
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                    EXTERNAL REFERENCE COMPARISON                          ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+CURRENT (Confusing):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ namespaces: ...                ❌ Mapping concept at top                 │
+│ defaults:                      ❌ Mapping concept nested                 │
+│   base_iri: ...                                                          │
+│ mapping_file: map.rml.ttl      ❌ Reference mixed with concepts          │
+│ validation: ...                ✅ Pipeline config                        │
+│ options: ...                   ✅ Pipeline config                        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PROPOSED (Clean):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ validation: ...                ✅ Pipeline section                       │
+│ options: ...                   ✅ Pipeline section                       │
+│                                                                          │
+│ mapping:                       ✅ All mapping under one section          │
+│   file: map.rml.ttl            ✅ Clean external reference               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                        TERMINOLOGY IMPROVEMENTS                           ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────┬──────────────────┬───────────────────────────────────┐
+│ OLD              │ NEW              │ REASON                            │
+├──────────────────┼──────────────────┼───────────────────────────────────┤
+│ sheets           │ sources          │ Format-agnostic                   │
+│ source (field)   │ file             │ Clearer                           │
+│ row_resource     │ entity           │ More semantic, no "row" assumption│
+│ columns          │ properties       │ Works for JSON/XML                │
+│ as               │ predicate        │ RML terminology                   │
+│ objects          │ relationships    │ Clearer intent                    │
+│ defaults.base_iri│ mapping.base_iri │ Better grouping                   │
+│ namespaces (top) │ mapping.names... │ Part of mapping                   │
+│ mapping_file     │ mapping.file     │ Consistent nesting                │
+└──────────────────┴──────────────────┴───────────────────────────────────┘
+
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                     FORMAT-SPECIFIC COMPARISON                            ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+CSV (Current works OK):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ sheets:                        ✓ OK for CSV                              │
+│   - source: file.csv           ✓ Makes sense                             │
+│     row_resource: ...          ✓ CSV has rows                            │
+│     columns: ...               ✓ CSV has columns                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+JSON (Current is awkward):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ sheets:                        ❌ Weird for JSON!                        │
+│   - source: api.json           ✓ OK                                      │
+│     row_resource: ...          ❌ JSON has no "rows"                     │
+│     columns: ...               ❌ JSON has no "columns"                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+XML (Current is very awkward):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ sheets:                        ❌ Very weird for XML!                    │
+│   - source: data.xml           ✓ OK                                      │
+│     row_resource: ...          ❌ XML has no "rows"                      │
+│     columns: ...               ❌ XML has no "columns"                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+NEW STRUCTURE (Works for all):
+┌─────────────────────────────────────────────────────────────────────────┐
+│ mapping:                                                                 │
+│   sources:                     ✅ Natural for all formats                │
+│     - file: data.{csv|json|xml}✅ Clear                                  │
+│       entity: ...              ✅ Semantic for all                       │
+│       properties: ...          ✅ Works perfectly for all                │
+└─────────────────────────────────────────────────────────────────────────┘
+
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                           MENTAL MODEL                                    ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+CURRENT (Confusing):
+  ┌─ namespaces          │ What level is this?
+  ├─ defaults            │ Why nested?
+  │  └─ base_iri         │ Part of mapping?
+  ├─ sheets              │ Part of mapping?
+  ├─ validation          │ Pipeline config?
+  └─ options             │ Pipeline config?
+
+     "Where do I put this? What goes where?"
+
+PROPOSED (Clear):
+  ┌─ validation          │ Pipeline: How to execute
+  ├─ options             │ Pipeline: How to execute
+  ├─ imports             │ Pipeline: What to load
+  └─ mapping:            │ Mapping: What to transform
+     ├─ namespaces       │   RML concepts
+     ├─ base_iri         │   RML concepts
+     └─ sources          │   RML concepts
+
+     "Two clear sections: pipeline vs mapping"
+
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                              SUMMARY                                      ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ CURRENT STRUCTURE                                                        ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ ❌ RML concepts scattered                                                ┃
+┃ ❌ Spreadsheet-centric terminology                                       ┃
+┃ ❌ Mixed pipeline and mapping config                                     ┃
+┃ ❌ Awkward nesting                                                        ┃
+┃ ❌ Unclear property names                                                 ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ PROPOSED STRUCTURE                                                       ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ ✅ Two clear sections (pipeline vs mapping)                              ┃
+┃ ✅ Format-agnostic terminology                                           ┃
+┃ ✅ RML-aligned structure                                                 ┃
+┃ ✅ Logical grouping                                                       ┃
+┃ ✅ Semantic property names                                                ┃
+┃ ✅ Better user experience                                                 ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+RECOMMENDATION: ✅ PROCEED WITH REFACTORING
+```
+

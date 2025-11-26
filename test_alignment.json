@@ -1,0 +1,844 @@
+{
+  "generated_at": "2025-11-22T23:58:16.369254",
+  "ontology_file": "examples/mortgage/ontology/mortgage_ontology.ttl",
+  "spreadsheet_file": "examples/mortgage/data/loans.csv",
+  "target_class": "Mortgage Loan",
+  "statistics": {
+    "total_columns": 10,
+    "mapped_columns": 10,
+    "unmapped_columns": 0,
+    "high_confidence_matches": 4,
+    "medium_confidence_matches": 2,
+    "low_confidence_matches": 0,
+    "very_low_confidence_matches": 0,
+    "mapping_success_rate": 1.0,
+    "average_confidence": 0.9021439484755197,
+    "matchers_fired_avg": 1.1,
+    "avg_evidence_count": 1.1,
+    "ontology_validation_rate": 0.2
+  },
+  "unmapped_columns": [],
+  "weak_matches": [
+    {
+      "column_name": "Principal",
+      "matched_property": "https://example.com/mortgage#principalAmount",
+      "match_type": "semantic_similarity",
+      "confidence_score": 0.7871918678283691,
+      "confidence_level": "medium",
+      "matched_via": "principal amount",
+      "sample_values": [
+        250000,
+        475000,
+        325000,
+        550000,
+        280000
+      ],
+      "suggestions": []
+    },
+    {
+      "column_name": "Status",
+      "matched_property": "https://example.com/mortgage#loanStatus",
+      "match_type": "semantic_similarity",
+      "confidence_score": 0.7855180501937866,
+      "confidence_level": "medium",
+      "matched_via": "loan status",
+      "sample_values": [
+        "Active",
+        "Active",
+        "Active",
+        "Active",
+        "Active"
+      ],
+      "suggestions": []
+    }
+  ],
+  "skos_enrichment_suggestions": [],
+  "ontology_context": {
+    "target_class": {
+      "uri": "https://example.com/mortgage#MortgageLoan",
+      "label": "Mortgage Loan",
+      "comment": "A loan secured by real property.",
+      "local_name": "MortgageLoan",
+      "properties": [
+        {
+          "uri": "https://example.com/mortgage#loanNumber",
+          "label": "loan number",
+          "pref_label": null,
+          "alt_labels": [],
+          "hidden_labels": [],
+          "comment": "Unique identifier for the loan.",
+          "domain_class": "https://example.com/mortgage#MortgageLoan",
+          "range_type": "http://www.w3.org/2001/XMLSchema#string",
+          "local_name": "loanNumber"
+        },
+        {
+          "uri": "https://example.com/mortgage#principalAmount",
+          "label": "principal amount",
+          "pref_label": null,
+          "alt_labels": [],
+          "hidden_labels": [],
+          "comment": "The original loan amount.",
+          "domain_class": "https://example.com/mortgage#MortgageLoan",
+          "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+          "local_name": "principalAmount"
+        },
+        {
+          "uri": "https://example.com/mortgage#interestRate",
+          "label": "interest rate",
+          "pref_label": null,
+          "alt_labels": [],
+          "hidden_labels": [],
+          "comment": "The annual interest rate as a decimal (e.g., 0.0525 for 5.25%).",
+          "domain_class": "https://example.com/mortgage#MortgageLoan",
+          "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+          "local_name": "interestRate"
+        },
+        {
+          "uri": "https://example.com/mortgage#originationDate",
+          "label": "origination date",
+          "pref_label": null,
+          "alt_labels": [],
+          "hidden_labels": [],
+          "comment": "The date when the loan was originated.",
+          "domain_class": "https://example.com/mortgage#MortgageLoan",
+          "range_type": "http://www.w3.org/2001/XMLSchema#date",
+          "local_name": "originationDate"
+        },
+        {
+          "uri": "https://example.com/mortgage#loanTerm",
+          "label": "loan term",
+          "pref_label": null,
+          "alt_labels": [],
+          "hidden_labels": [],
+          "comment": "The term of the loan in months.",
+          "domain_class": "https://example.com/mortgage#MortgageLoan",
+          "range_type": "http://www.w3.org/2001/XMLSchema#integer",
+          "local_name": "loanTerm"
+        },
+        {
+          "uri": "https://example.com/mortgage#loanStatus",
+          "label": "loan status",
+          "pref_label": null,
+          "alt_labels": [],
+          "hidden_labels": [],
+          "comment": "Current status of the loan (Active, Paid Off, Default, etc.).",
+          "domain_class": "https://example.com/mortgage#MortgageLoan",
+          "range_type": "http://www.w3.org/2001/XMLSchema#string",
+          "local_name": "loanStatus"
+        }
+      ]
+    },
+    "related_classes": [
+      {
+        "uri": "https://example.com/mortgage#Borrower",
+        "label": "Borrower",
+        "comment": "A person or entity that borrows money.",
+        "local_name": "Borrower",
+        "properties": [
+          {
+            "uri": "https://example.com/mortgage#borrowerName",
+            "label": "borrower name",
+            "pref_label": null,
+            "alt_labels": [],
+            "hidden_labels": [],
+            "comment": "Full name of the borrower.",
+            "domain_class": "https://example.com/mortgage#Borrower",
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "borrowerName"
+          },
+          {
+            "uri": "https://example.com/mortgage#borrowerEmail",
+            "label": "borrower email",
+            "pref_label": null,
+            "alt_labels": [],
+            "hidden_labels": [],
+            "comment": "Email address of the borrower.",
+            "domain_class": "https://example.com/mortgage#Borrower",
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "borrowerEmail"
+          },
+          {
+            "uri": "https://example.com/mortgage#creditScore",
+            "label": "credit score",
+            "pref_label": null,
+            "alt_labels": [],
+            "hidden_labels": [],
+            "comment": "Credit score of the borrower.",
+            "domain_class": "https://example.com/mortgage#Borrower",
+            "range_type": "http://www.w3.org/2001/XMLSchema#integer",
+            "local_name": "creditScore"
+          }
+        ]
+      },
+      {
+        "uri": "https://example.com/mortgage#Property",
+        "label": "Property",
+        "comment": "Real estate property used as collateral.",
+        "local_name": "Property",
+        "properties": [
+          {
+            "uri": "https://example.com/mortgage#propertyAddress",
+            "label": "property address",
+            "pref_label": null,
+            "alt_labels": [],
+            "hidden_labels": [],
+            "comment": "Street address of the property.",
+            "domain_class": "https://example.com/mortgage#Property",
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "propertyAddress"
+          },
+          {
+            "uri": "https://example.com/mortgage#propertyValue",
+            "label": "property value",
+            "pref_label": null,
+            "alt_labels": [],
+            "hidden_labels": [],
+            "comment": "Appraised value of the property.",
+            "domain_class": "https://example.com/mortgage#Property",
+            "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+            "local_name": "propertyValue"
+          },
+          {
+            "uri": "https://example.com/mortgage#propertyType",
+            "label": "property type",
+            "pref_label": null,
+            "alt_labels": [],
+            "hidden_labels": [],
+            "comment": "Type of property (Single Family, Condo, Multi-Family, etc.).",
+            "domain_class": "https://example.com/mortgage#Property",
+            "range_type": "http://www.w3.org/2001/XMLSchema#string",
+            "local_name": "propertyType"
+          }
+        ]
+      }
+    ],
+    "all_properties": [
+      {
+        "uri": "https://example.com/mortgage#hasBorrower",
+        "label": "has borrower",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Links a mortgage loan to its borrower.",
+        "domain_class": null,
+        "range_type": "https://example.com/mortgage#Borrower",
+        "local_name": "hasBorrower"
+      },
+      {
+        "uri": "https://example.com/mortgage#collateralProperty",
+        "label": "collateral property",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "The property used as collateral for the loan.",
+        "domain_class": null,
+        "range_type": "https://example.com/mortgage#Property",
+        "local_name": "collateralProperty"
+      },
+      {
+        "uri": "https://example.com/mortgage#loanNumber",
+        "label": "loan number",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Unique identifier for the loan.",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "loanNumber"
+      },
+      {
+        "uri": "https://example.com/mortgage#principalAmount",
+        "label": "principal amount",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "The original loan amount.",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+        "local_name": "principalAmount"
+      },
+      {
+        "uri": "https://example.com/mortgage#interestRate",
+        "label": "interest rate",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "The annual interest rate as a decimal (e.g., 0.0525 for 5.25%).",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+        "local_name": "interestRate"
+      },
+      {
+        "uri": "https://example.com/mortgage#originationDate",
+        "label": "origination date",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "The date when the loan was originated.",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#date",
+        "local_name": "originationDate"
+      },
+      {
+        "uri": "https://example.com/mortgage#loanTerm",
+        "label": "loan term",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "The term of the loan in months.",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#integer",
+        "local_name": "loanTerm"
+      },
+      {
+        "uri": "https://example.com/mortgage#loanStatus",
+        "label": "loan status",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Current status of the loan (Active, Paid Off, Default, etc.).",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "loanStatus"
+      },
+      {
+        "uri": "https://example.com/mortgage#borrowerName",
+        "label": "borrower name",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Full name of the borrower.",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "borrowerName"
+      },
+      {
+        "uri": "https://example.com/mortgage#borrowerEmail",
+        "label": "borrower email",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Email address of the borrower.",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "borrowerEmail"
+      },
+      {
+        "uri": "https://example.com/mortgage#creditScore",
+        "label": "credit score",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Credit score of the borrower.",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#integer",
+        "local_name": "creditScore"
+      },
+      {
+        "uri": "https://example.com/mortgage#propertyAddress",
+        "label": "property address",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Street address of the property.",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "propertyAddress"
+      },
+      {
+        "uri": "https://example.com/mortgage#propertyValue",
+        "label": "property value",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Appraised value of the property.",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#decimal",
+        "local_name": "propertyValue"
+      },
+      {
+        "uri": "https://example.com/mortgage#propertyType",
+        "label": "property type",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Type of property (Single Family, Condo, Multi-Family, etc.).",
+        "domain_class": null,
+        "range_type": "http://www.w3.org/2001/XMLSchema#string",
+        "local_name": "propertyType"
+      }
+    ],
+    "object_properties": [
+      {
+        "uri": "https://example.com/mortgage#hasBorrower",
+        "label": "has borrower",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "Links a mortgage loan to its borrower.",
+        "domain_class": null,
+        "range_type": "https://example.com/mortgage#Borrower",
+        "local_name": "hasBorrower"
+      },
+      {
+        "uri": "https://example.com/mortgage#collateralProperty",
+        "label": "collateral property",
+        "pref_label": null,
+        "alt_labels": [],
+        "hidden_labels": [],
+        "comment": "The property used as collateral for the loan.",
+        "domain_class": null,
+        "range_type": "https://example.com/mortgage#Property",
+        "local_name": "collateralProperty"
+      }
+    ]
+  },
+  "match_details": [
+    {
+      "column_name": "LoanID",
+      "matched_property": "https://example.com/mortgage#loanNumber",
+      "match_type": "semantic_similarity",
+      "confidence_score": 0.9401537728309632,
+      "matcher_name": "SemanticSimilarityMatcher",
+      "matched_via": "embedding (phrase=0.820; token=0.642; id_boost=0.070)",
+      "evidence": [
+        {
+          "matcher_name": "SemanticSimilarityMatcher",
+          "match_type": "semantic_similarity",
+          "confidence": 0.8901537728309632,
+          "matched_via": "embedding (phrase=0.820; token=0.642; id_boost=0.070)",
+          "evidence_category": "other"
+        },
+        {
+          "matcher_name": "DataTypeInferenceMatcher",
+          "match_type": "data_type_compatibility",
+          "confidence": 0.68,
+          "matched_via": "Type validation: string \u2192 string (100% compatible)",
+          "evidence_category": "other"
+        }
+      ],
+      "evidence_groups": [
+        {
+          "category": "semantic",
+          "evidence_items": [
+            {
+              "matcher_name": "SemanticSimilarityMatcher",
+              "match_type": "semantic_similarity",
+              "confidence": 0.8901537728309632,
+              "matched_via": "embedding (phrase=0.820; token=0.642; id_boost=0.070)",
+              "evidence_category": "semantic"
+            }
+          ],
+          "avg_confidence": 0.8901537728309632,
+          "description": "Semantic reasoning based on embeddings and label matching"
+        },
+        {
+          "category": "ontological_validation",
+          "evidence_items": [
+            {
+              "matcher_name": "DataTypeInferenceMatcher",
+              "match_type": "data_type_compatibility",
+              "confidence": 0.68,
+              "matched_via": "Type validation: string \u2192 string (100% compatible)",
+              "evidence_category": "ontological_validation"
+            }
+          ],
+          "avg_confidence": 0.68,
+          "description": "Ontological validation using OWL constraints and type system"
+        }
+      ],
+      "reasoning_summary": "Matched to 'loan number' with 0.94 confidence. Semantic reasoning: 1 matchers agree (avg: 0.89). Ontology validates: type compatibility (1 checks, avg: 0.68). Very high confidence - multiple strategies converge.",
+      "boosters_applied": [
+        {
+          "type": "booster_total",
+          "value": 0.05
+        }
+      ],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [],
+      "performance_metrics": {
+        "execution_time_ms": 147.0167636871338,
+        "matchers_fired": 5,
+        "matchers_succeeded": 2,
+        "parallel_speedup": 1.0
+      }
+    },
+    {
+      "column_name": "Principal",
+      "matched_property": "https://example.com/mortgage#principalAmount",
+      "match_type": "semantic_similarity",
+      "confidence_score": 0.7871918678283691,
+      "matcher_name": "SemanticSimilarityMatcher",
+      "matched_via": "embedding (phrase=0.387; token=0.787)",
+      "evidence": [
+        {
+          "matcher_name": "SemanticSimilarityMatcher",
+          "match_type": "semantic_similarity",
+          "confidence": 0.7871918678283691,
+          "matched_via": "embedding (phrase=0.387; token=0.787)",
+          "evidence_category": "other"
+        }
+      ],
+      "evidence_groups": [
+        {
+          "category": "semantic",
+          "evidence_items": [
+            {
+              "matcher_name": "SemanticSimilarityMatcher",
+              "match_type": "semantic_similarity",
+              "confidence": 0.7871918678283691,
+              "matched_via": "embedding (phrase=0.387; token=0.787)",
+              "evidence_category": "semantic"
+            }
+          ],
+          "avg_confidence": 0.7871918678283691,
+          "description": "Semantic reasoning based on embeddings and label matching"
+        }
+      ],
+      "reasoning_summary": "Matched to 'principal amount' with 0.79 confidence. Semantic reasoning: 1 matchers agree (avg: 0.79). Good confidence - evidence supports match.",
+      "boosters_applied": [],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [
+        {
+          "property": "https://example.com/mortgage#loanTerm",
+          "combined_confidence": 0.53,
+          "evidence_count": 1
+        }
+      ],
+      "performance_metrics": {
+        "execution_time_ms": 54.92210388183594,
+        "matchers_fired": 5,
+        "matchers_succeeded": 2,
+        "parallel_speedup": 1.0
+      }
+    },
+    {
+      "column_name": "InterestRate",
+      "matched_property": "https://example.com/mortgage#interestRate",
+      "match_type": "exact_label",
+      "confidence_score": 0.95,
+      "matcher_name": "ExactRdfsLabelMatcher",
+      "matched_via": "interest rate",
+      "evidence": [
+        {
+          "matcher_name": "ExactRdfsLabelMatcher",
+          "match_type": "exact_label",
+          "confidence": 0.95,
+          "matched_via": "interest rate",
+          "evidence_category": "other"
+        },
+        {
+          "matcher_name": "SemanticSimilarityMatcher",
+          "match_type": "semantic_similarity",
+          "confidence": 0.8330426812171936,
+          "matched_via": "embedding (phrase=0.667; token=0.833)",
+          "evidence_category": "other"
+        }
+      ],
+      "evidence_groups": [
+        {
+          "category": "semantic",
+          "evidence_items": [
+            {
+              "matcher_name": "ExactRdfsLabelMatcher",
+              "match_type": "exact_label",
+              "confidence": 0.95,
+              "matched_via": "interest rate",
+              "evidence_category": "semantic"
+            },
+            {
+              "matcher_name": "SemanticSimilarityMatcher",
+              "match_type": "semantic_similarity",
+              "confidence": 0.8330426812171936,
+              "matched_via": "embedding (phrase=0.667; token=0.833)",
+              "evidence_category": "semantic"
+            }
+          ],
+          "avg_confidence": 0.8915213406085968,
+          "description": "Semantic reasoning based on embeddings and label matching"
+        }
+      ],
+      "reasoning_summary": "Matched to 'interest rate' with 0.95 confidence. Semantic reasoning: 2 matchers agree (avg: 0.89). Very high confidence - multiple strategies converge.",
+      "boosters_applied": [],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [
+        {
+          "property": "https://example.com/mortgage#principalAmount",
+          "combined_confidence": 0.53,
+          "evidence_count": 1
+        }
+      ],
+      "performance_metrics": {
+        "execution_time_ms": 58.51888656616211,
+        "matchers_fired": 5,
+        "matchers_succeeded": 3,
+        "parallel_speedup": 1.0
+      }
+    },
+    {
+      "column_name": "OriginationDate",
+      "matched_property": "https://example.com/mortgage#originationDate",
+      "match_type": "exact_label",
+      "confidence_score": 0.95,
+      "matcher_name": "ExactRdfsLabelMatcher",
+      "matched_via": "origination date",
+      "evidence": [
+        {
+          "matcher_name": "ExactRdfsLabelMatcher",
+          "match_type": "exact_label",
+          "confidence": 0.95,
+          "matched_via": "origination date",
+          "evidence_category": "other"
+        },
+        {
+          "matcher_name": "SemanticSimilarityMatcher",
+          "match_type": "semantic_similarity",
+          "confidence": 0.8179789781570435,
+          "matched_via": "embedding (phrase=0.496; token=0.818)",
+          "evidence_category": "other"
+        }
+      ],
+      "evidence_groups": [
+        {
+          "category": "semantic",
+          "evidence_items": [
+            {
+              "matcher_name": "ExactRdfsLabelMatcher",
+              "match_type": "exact_label",
+              "confidence": 0.95,
+              "matched_via": "origination date",
+              "evidence_category": "semantic"
+            },
+            {
+              "matcher_name": "SemanticSimilarityMatcher",
+              "match_type": "semantic_similarity",
+              "confidence": 0.8179789781570435,
+              "matched_via": "embedding (phrase=0.496; token=0.818)",
+              "evidence_category": "semantic"
+            }
+          ],
+          "avg_confidence": 0.8839894890785217,
+          "description": "Semantic reasoning based on embeddings and label matching"
+        }
+      ],
+      "reasoning_summary": "Matched to 'origination date' with 0.95 confidence. Semantic reasoning: 2 matchers agree (avg: 0.88). Very high confidence - multiple strategies converge.",
+      "boosters_applied": [],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [
+        {
+          "property": "https://example.com/mortgage#loanNumber",
+          "combined_confidence": 0.53,
+          "evidence_count": 1
+        }
+      ],
+      "performance_metrics": {
+        "execution_time_ms": 51.618099212646484,
+        "matchers_fired": 5,
+        "matchers_succeeded": 3,
+        "parallel_speedup": 1.0
+      }
+    },
+    {
+      "column_name": "LoanTerm",
+      "matched_property": "https://example.com/mortgage#loanTerm",
+      "match_type": "exact_label",
+      "confidence_score": 1.0,
+      "matcher_name": "ExactRdfsLabelMatcher",
+      "matched_via": "loan term",
+      "evidence": [
+        {
+          "matcher_name": "ExactRdfsLabelMatcher",
+          "match_type": "exact_label",
+          "confidence": 0.95,
+          "matched_via": "loan term",
+          "evidence_category": "other"
+        },
+        {
+          "matcher_name": "DataTypeInferenceMatcher",
+          "match_type": "data_type_compatibility",
+          "confidence": 0.68,
+          "matched_via": "Type validation: integer \u2192 integer (100% compatible)",
+          "evidence_category": "other"
+        },
+        {
+          "matcher_name": "SemanticSimilarityMatcher",
+          "match_type": "semantic_similarity",
+          "confidence": 0.6758102774620056,
+          "matched_via": "embedding (phrase=0.425; token=0.676)",
+          "evidence_category": "other"
+        }
+      ],
+      "evidence_groups": [
+        {
+          "category": "semantic",
+          "evidence_items": [
+            {
+              "matcher_name": "ExactRdfsLabelMatcher",
+              "match_type": "exact_label",
+              "confidence": 0.95,
+              "matched_via": "loan term",
+              "evidence_category": "semantic"
+            },
+            {
+              "matcher_name": "SemanticSimilarityMatcher",
+              "match_type": "semantic_similarity",
+              "confidence": 0.6758102774620056,
+              "matched_via": "embedding (phrase=0.425; token=0.676)",
+              "evidence_category": "semantic"
+            }
+          ],
+          "avg_confidence": 0.8129051387310028,
+          "description": "Semantic reasoning based on embeddings and label matching"
+        },
+        {
+          "category": "ontological_validation",
+          "evidence_items": [
+            {
+              "matcher_name": "DataTypeInferenceMatcher",
+              "match_type": "data_type_compatibility",
+              "confidence": 0.68,
+              "matched_via": "Type validation: integer \u2192 integer (100% compatible)",
+              "evidence_category": "ontological_validation"
+            }
+          ],
+          "avg_confidence": 0.68,
+          "description": "Ontological validation using OWL constraints and type system"
+        }
+      ],
+      "reasoning_summary": "Matched to 'loan term' with 1.00 confidence. Semantic reasoning: 2 matchers agree (avg: 0.81). Ontology validates: type compatibility (1 checks, avg: 0.68). Very high confidence - multiple strategies converge.",
+      "boosters_applied": [
+        {
+          "type": "booster_total",
+          "value": 0.05
+        }
+      ],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [],
+      "performance_metrics": {
+        "execution_time_ms": 75.8810043334961,
+        "matchers_fired": 5,
+        "matchers_succeeded": 3,
+        "parallel_speedup": 1.0
+      }
+    },
+    {
+      "column_name": "Status",
+      "matched_property": "https://example.com/mortgage#loanStatus",
+      "match_type": "semantic_similarity",
+      "confidence_score": 0.7855180501937866,
+      "matcher_name": "SemanticSimilarityMatcher",
+      "matched_via": "embedding (phrase=0.434; token=0.786)",
+      "evidence": [
+        {
+          "matcher_name": "SemanticSimilarityMatcher",
+          "match_type": "semantic_similarity",
+          "confidence": 0.7855180501937866,
+          "matched_via": "embedding (phrase=0.434; token=0.786)",
+          "evidence_category": "other"
+        }
+      ],
+      "evidence_groups": [
+        {
+          "category": "semantic",
+          "evidence_items": [
+            {
+              "matcher_name": "SemanticSimilarityMatcher",
+              "match_type": "semantic_similarity",
+              "confidence": 0.7855180501937866,
+              "matched_via": "embedding (phrase=0.434; token=0.786)",
+              "evidence_category": "semantic"
+            }
+          ],
+          "avg_confidence": 0.7855180501937866,
+          "description": "Semantic reasoning based on embeddings and label matching"
+        }
+      ],
+      "reasoning_summary": "Matched to 'loan status' with 0.79 confidence. Semantic reasoning: 1 matchers agree (avg: 0.79). Good confidence - evidence supports match.",
+      "boosters_applied": [],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [
+        {
+          "property": "https://example.com/mortgage#loanNumber",
+          "combined_confidence": 0.53,
+          "evidence_count": 1
+        }
+      ],
+      "performance_metrics": {
+        "execution_time_ms": 51.62525177001953,
+        "matchers_fired": 5,
+        "matchers_succeeded": 2,
+        "parallel_speedup": 1.0
+      }
+    },
+    {
+      "column_name": "BorrowerName",
+      "matched_property": "ex:borrowerName",
+      "match_type": "exact_label",
+      "confidence_score": 0.95,
+      "matcher_name": "ObjectPropertyMatcher",
+      "matched_via": "has borrower property",
+      "evidence": [],
+      "evidence_groups": [],
+      "reasoning_summary": null,
+      "boosters_applied": [],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [],
+      "performance_metrics": null
+    },
+    {
+      "column_name": "PropertyAddress",
+      "matched_property": "ex:propertyAddress",
+      "match_type": "exact_label",
+      "confidence_score": 0.95,
+      "matcher_name": "ObjectPropertyMatcher",
+      "matched_via": "collateral property property",
+      "evidence": [],
+      "evidence_groups": [],
+      "reasoning_summary": null,
+      "boosters_applied": [],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [],
+      "performance_metrics": null
+    },
+    {
+      "column_name": "BorrowerID",
+      "matched_property": "ex:hasBorrower",
+      "match_type": "graph_reasoning",
+      "confidence_score": 0.92,
+      "matcher_name": "RelationshipMatcher",
+      "matched_via": "Foreign key to has borrower",
+      "evidence": [],
+      "evidence_groups": [],
+      "reasoning_summary": null,
+      "boosters_applied": [],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [],
+      "performance_metrics": null
+    },
+    {
+      "column_name": "PropertyID",
+      "matched_property": "ex:collateralProperty",
+      "match_type": "graph_reasoning",
+      "confidence_score": 0.92,
+      "matcher_name": "RelationshipMatcher",
+      "matched_via": "Foreign key to collateral property",
+      "evidence": [],
+      "evidence_groups": [],
+      "reasoning_summary": null,
+      "boosters_applied": [],
+      "penalties_applied": [],
+      "ambiguity_group_size": null,
+      "alternates": [],
+      "performance_metrics": null
+    }
+  ]
+}

@@ -510,13 +510,33 @@ class XMLParser(DataSourceParser):
         root = tree.getroot()
 
         # Find all row elements using XPath
-        row_elements = root.findall(self.row_xpath)
+        # ElementTree's XPath support is limited:
+        # - Absolute paths starting with / don't work as expected
+        # - Need to convert to relative paths from root element
+        xpath = self.row_xpath
+
+        if xpath.startswith('/'):
+            # Convert absolute XPath /root/child to relative root/child
+            # But if root element name matches, strip it
+            parts = xpath.lstrip('/').split('/')
+            if parts[0] == root.tag:
+                # Path includes root element name - use remaining parts
+                xpath = '/'.join(parts[1:])
+            else:
+                # Path doesn't include root - use as is
+                xpath = '/'.join(parts)
+
+        # Use root.findall for relative paths from root element
+        row_elements = root.findall(xpath) if xpath else []
 
         # Convert XML elements to dictionaries
         rows_data = []
         for element in row_elements:
             row_dict = self._xml_element_to_dict(element)
-            rows_data.append(row_dict)
+            # Flatten nested dictionaries so XPath-style references work
+            # e.g., {'loanInfo': {'amount': 100}} -> {'loanInfo/amount': 100}
+            flattened = self._flatten_xml_dict(row_dict)
+            rows_data.append(flattened)
 
         if not rows_data:
             return
@@ -531,14 +551,14 @@ class XMLParser(DataSourceParser):
         else:
             yield df
 
-    def _xml_element_to_dict(self, element: ET.Element) -> Dict[str, Any]:
-        """Convert XML element to dictionary.
+    def _xml_element_to_dict(self, element: ET.Element) -> Any:
+        """Convert XML element to dictionary or simple value.
 
         Args:
             element: XML element
 
         Returns:
-            Dictionary representation of the element
+            Dictionary representation of the element, or simple value if leaf node
         """
         result = {}
 
@@ -547,21 +567,81 @@ class XMLParser(DataSourceParser):
             for key, value in element.attrib.items():
                 result[f"@{key}"] = value
 
-        # Add text content
-        if element.text and element.text.strip():
-            result["text"] = element.text.strip()
+        # Check if element has children
+        children = list(element)
+        has_children = len(children) > 0
+
+        # Get text content
+        text_content = element.text.strip() if element.text else ""
+
+        # Decision logic for return value:
+        # 1. If no attributes and no children -> return text directly
+        # 2. If has attributes but no children and has text -> return dict with @attrs and text value
+        # 3. If has children -> return dict with children (and optionally text)
+        # 4. If has attributes and children -> return dict with both
+
+        if not element.attrib and not has_children:
+            # Simple leaf node with just text - return text directly
+            return text_content if text_content else ""
+
+        # Has attributes or children - need to return dict
+        if text_content:
+            result["text"] = text_content
 
         # Add child elements
-        for child in element:
-            child_dict = self._xml_element_to_dict(child)
+        for child in children:
+            child_value = self._xml_element_to_dict(child)
 
             if child.tag in result:
                 # Handle multiple elements with same tag
                 if not isinstance(result[child.tag], list):
                     result[child.tag] = [result[child.tag]]
-                result[child.tag].append(child_dict)
+                result[child.tag].append(child_value)
             else:
-                result[child.tag] = child_dict
+                result[child.tag] = child_value
+
+        return result
+
+    def _flatten_xml_dict(self, d: Dict[str, Any], prefix: str = "", separator: str = "/") -> Dict[str, Any]:
+        """Flatten nested XML dictionary to match XPath-style references.
+
+        Converts:
+            {'loanInfo': {'amount': 100, 'rate': 4.5}}
+        To:
+            {'loanInfo/amount': 100, 'loanInfo/rate': 4.5}
+
+        Args:
+            d: Nested dictionary from XML
+            prefix: Current path prefix
+            separator: Path separator (default: '/')
+
+        Returns:
+            Flattened dictionary with XPath-style keys
+        """
+        result = {}
+
+        for key, value in d.items():
+            # Build the full path
+            full_key = f"{prefix}{separator}{key}" if prefix else key
+
+            if isinstance(value, dict):
+                # Recursively flatten nested dicts
+                nested = self._flatten_xml_dict(value, full_key, separator)
+                result.update(nested)
+            elif isinstance(value, list):
+                # Handle lists - for now, take first item or convert to string
+                if value and isinstance(value[0], dict):
+                    # List of dicts - flatten first item with index
+                    nested = self._flatten_xml_dict(value[0], f"{full_key}[0]", separator)
+                    result.update(nested)
+                elif value:
+                    # List of simple values - join as string
+                    result[full_key] = ", ".join(str(v) for v in value)
+                else:
+                    result[full_key] = None
+            else:
+                # Simple value
+                result[full_key] = value
 
         return result
 
@@ -570,8 +650,17 @@ class XMLParser(DataSourceParser):
         tree = ET.parse(self.file_path)
         root = tree.getroot()
 
+        # Convert absolute XPath to relative from root element
+        xpath = self.row_xpath
+        if xpath.startswith('/'):
+            parts = xpath.lstrip('/').split('/')
+            if parts[0] == root.tag:
+                xpath = '/'.join(parts[1:])
+            else:
+                xpath = '/'.join(parts)
+
         # Sample first few elements to determine columns
-        row_elements = root.findall(self.row_xpath)[:10]
+        row_elements = root.findall(xpath)[:10] if xpath else []
 
         all_keys = set()
         for element in row_elements:

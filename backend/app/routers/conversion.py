@@ -27,13 +27,18 @@ async def convert_to_rdf(
     try:
         logger.info(f"Converting project {project_id} to RDF (format: {output_format})")
 
-        # Check if mapping file exists
+        # Check if mapping file exists - try both DATA_DIR and UPLOAD_DIR
+        # DATA_DIR: Generated mappings
+        # UPLOAD_DIR: Imported mappings
         mapping_file = Path(settings.DATA_DIR) / project_id / "mapping_config.yaml"
         if not mapping_file.exists():
-            raise HTTPException(
-                status_code=400,
-                detail="No mapping configuration found. Generate mappings first."
-            )
+            # Try UPLOAD_DIR (for imported mappings)
+            mapping_file = Path(settings.UPLOAD_DIR) / project_id / "mapping_config.yaml"
+            if not mapping_file.exists():
+                raise HTTPException(
+                    status_code=400,
+                    detail="No mapping configuration found. Generate or import mappings first."
+                )
 
         if use_background:
             # Queue background task
@@ -93,6 +98,13 @@ async def get_job_status(task_id: str):
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+async def get_job_status(task_id: str):
+    """
+    Get the status and (if available) the result of a background conversion job.
+    Deprecated: Use /task/{task_id} instead.
+    """
+    return await get_task_status(task_id)
 
 
 @router.get("/{project_id}/download")

@@ -1,0 +1,58 @@
+{
+  "num_rows": 500000,
+  "seed": 42,
+  "columns": [
+    {
+      "name": "LoanID",
+      "type": "id",
+      "format": "L"
+    },
+    {
+      "name": "BorrowerID",
+      "type": "id",
+      "format": "B"
+    },
+    {
+      "name": "BorrowerName",
+      "type": "name"
+    },
+    {
+      "name": "PropertyID",
+      "type": "id",
+      "format": "P"
+    },
+    {
+      "name": "PropertyAddress",
+      "type": "address"
+    },
+    {
+      "name": "Principal",
+      "type": "integer",
+      "min": 100000,
+      "max": 1000000
+    },
+    {
+      "name": "InterestRate",
+      "type": "float",
+      "min": 0.03,
+      "max": 0.08,
+      "decimals": 4
+    },
+    {
+      "name": "OriginationDate",
+      "type": "date",
+      "format": "2020-01-01:2023-12-31"
+    },
+    {
+      "name": "LoanTerm",
+      "type": "enum",
+      "values": ["180", "240", "300", "360"]
+    },
+    {
+      "name": "Status",
+      "type": "enum",
+      "values": ["Active", "Paid Off", "Delinquent", "Foreclosed"]
+    }
+  ]
+}
+

@@ -1,0 +1,92 @@
+# ════════════════════════════════════════════════════════════════════════════════
+# RDFMap Configuration - External RML Reference
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# This format references an external RML or YARRRML mapping file.
+# Use this when you:
+#   - Have existing RML/YARRRML mappings
+#   - Want to reuse mappings across projects
+#   - Need rdfmap-specific features (validation, options) with standard RML
+#
+# The mapping file can be:
+#   - RML (Turtle, RDF/XML, N-Triples)
+#   - YARRRML (YAML format)
+#
+# ════════════════════════════════════════════════════════════════════════════════
+
+# Required: Namespaces used in the mapping
+namespaces:
+  xsd: http://www.w3.org/2001/XMLSchema#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  ex: https://example.com/mortgage#
+  owl: http://www.w3.org/2002/07/owl#
+
+# Required: Default configuration
+defaults:
+  base_iri: http://example.org/
+
+# ────────────────────────────────────────────────────────────────────────────────
+# External Mapping File Reference
+# ────────────────────────────────────────────────────────────────────────────────
+# Point to your existing RML or YARRRML file.
+# Path can be relative (to this config file) or absolute.
+
+mapping_file: ../output/standard.yaml
+
+# OR use RML in Turtle format:
+# mapping_file: generated_mapping.rml.ttl
+
+# OR use RML in RDF/XML format:
+# mapping_file: generated_mapping.rml.rdf
+
+# ────────────────────────────────────────────────────────────────────────────────
+# RDFMap-Specific Configuration
+# ────────────────────────────────────────────────────────────────────────────────
+# These sections are NOT part of standard RML/YARRRML.
+# They add rdfmap's pipeline features to your standard mapping.
+
+# Validation configuration
+validation:
+  shacl:
+    enabled: true
+    shapes_file: ../shapes/mortgage_shapes.ttl
+    inference: none
+
+# Processing options
+options:
+  on_error: "report"  # or "fail-fast"
+  skip_empty_values: true
+  chunk_size: 1000
+  aggregate_duplicates: true  # Set false for large datasets
+  output_format: ttl  # or nt, xml, jsonld
+
+# Ontology imports (for validation)
+imports:
+  - ../ontology/mortgage_ontology.ttl
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Benefits of This Approach
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# 1. Standards Compliance:
+#    - Your mapping file (RML/YARRRML) remains 100% standard
+#    - Can be used with RMLMapper, Morph-KGC, etc.
+#    - No vendor lock-in
+#
+# 2. RDFMap Features:
+#    - Add validation (SHACL) to any RML mapping
+#    - Configure error handling and processing options
+#    - Use rdfmap's performance optimizations
+#
+# 3. Separation of Concerns:
+#    - Mapping logic (RML) separate from execution config
+#    - Reuse same mapping with different validation/options
+#    - Team members can work on mapping vs config independently
+#
+# 4. Migration Path:
+#    - Start with RML from another tool
+#    - Add rdfmap config wrapper for features
+#    - Keep compatibility with original tool
+#
+# ════════════════════════════════════════════════════════════════════════════════
+

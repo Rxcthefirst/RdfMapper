@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Typography, Button, Box, Dialog, DialogTitle, DialogContent, TextField, DialogActions, List, ListItemButton, ListItemText, Alert, CircularProgress } from '@mui/material'
+import { Typography, Button, Box, Dialog, DialogTitle, DialogContent, TextField, DialogActions, List, ListItemButton, ListItemText, Alert, CircularProgress, IconButton, ListItem } from '@mui/material'
+import DeleteIcon from '@mui/icons-material/Delete'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../services/api'
@@ -8,6 +9,8 @@ export default function ProjectList() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<any>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -56,9 +59,37 @@ export default function ProjectList() {
     },
   })
 
+  const deleteProject = useMutation({
+    mutationFn: async (projectId: string) => {
+      return await api.deleteProject(projectId)
+    },
+    onSuccess: () => {
+      setDeleteDialogOpen(false)
+      setProjectToDelete(null)
+      setError(null)
+      refetch()
+    },
+    onError: (err: any) => {
+      setError(err.message || 'Failed to delete project')
+      setDeleteDialogOpen(false)
+    },
+  })
+
   const handleCreate = () => {
     setError(null)
     create.mutate({ name, description })
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent, project: any) => {
+    e.stopPropagation() // Prevent navigation
+    setProjectToDelete(project)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteConfirm = () => {
+    if (projectToDelete) {
+      deleteProject.mutate(projectToDelete.id)
+    }
   }
 
   if (isLoading) {
@@ -95,14 +126,6 @@ export default function ProjectList() {
         </Button>
       </Box>
 
-      {/* Debug info - remove after testing */}
-      <Alert severity="info" sx={{ mb: 2 }}>
-        Debug: Projects loaded = {projectsArray.length} |
-        isArray = {String(Array.isArray(projects))} |
-        type = {typeof projects}
-        <br />
-        Raw data: {JSON.stringify(projects)}
-      </Alert>
 
       {!hasProjects && (
         <Alert severity="info" sx={{ mb: 2 }}>
@@ -110,14 +133,35 @@ export default function ProjectList() {
         </Alert>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <List>
         {projectsArray.map((p: any) => (
-          <ListItemButton key={p.id} onClick={() => navigate(`/projects/${p.id}`)}>
-            <ListItemText
-              primary={p.name || 'Untitled'}
-              secondary={p.description || 'No description'}
-            />
-          </ListItemButton>
+          <ListItem
+            key={p.id}
+            secondaryAction={
+              <IconButton
+                edge="end"
+                aria-label="delete"
+                onClick={(e) => handleDeleteClick(e, p)}
+                color="error"
+              >
+                <DeleteIcon />
+              </IconButton>
+            }
+            disablePadding
+          >
+            <ListItemButton onClick={() => navigate(`/projects/${p.id}`)}>
+              <ListItemText
+                primary={p.name || 'Untitled'}
+                secondary={p.description || 'No description'}
+              />
+            </ListItemButton>
+          </ListItem>
         ))}
       </List>
 
@@ -158,6 +202,29 @@ export default function ProjectList() {
             startIcon={create.isPending ? <CircularProgress size={20} /> : null}
           >
             {create.isPending ? 'Creating...' : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>Delete Project?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete "{projectToDelete?.name}"? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleteProject.isPending}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            color="error"
+            variant="contained"
+            disabled={deleteProject.isPending}
+          >
+            {deleteProject.isPending ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>

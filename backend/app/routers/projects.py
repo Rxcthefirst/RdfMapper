@@ -1,6 +1,6 @@
 """Projects API router."""
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query, Response
 from typing import List
 from pathlib import Path
 from sqlalchemy.orm import Session
@@ -127,9 +127,10 @@ async def upload_data_file(
             detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
         )
 
-    # Save file
+    # Save file with original filename
     project_dir = Path(settings.UPLOAD_DIR) / project_id
-    file_path = project_dir / f"data{file_ext}"
+    original_filename = Path(file.filename).name
+    file_path = project_dir / original_filename
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -165,9 +166,10 @@ async def upload_ontology_file(
             detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
         )
 
-    # Save file
+    # Save file with original filename
     project_dir = Path(settings.UPLOAD_DIR) / project_id
-    file_path = project_dir / f"ontology{file_ext}"
+    original_filename = Path(file.filename).name
+    file_path = project_dir / original_filename
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -199,7 +201,8 @@ async def upload_shapes_file(
         raise HTTPException(status_code=400, detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}")
 
     project_dir = Path(settings.UPLOAD_DIR) / project_id
-    file_path = project_dir / f"shapes{file_ext}"
+    original_filename = Path(file.filename).name
+    file_path = project_dir / original_filename
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -228,12 +231,16 @@ async def upload_skos_file(
 
     project_dir = Path(settings.UPLOAD_DIR) / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
-    # Name with increment to avoid overwriting
-    base = "skos"
-    target = project_dir / f"{base}{file_ext}"
+
+    # Preserve original filename, add increment only if duplicate
+    original_filename = Path(file.filename).name
+    file_stem = Path(original_filename).stem
+    file_ext = Path(original_filename).suffix
+
+    target = project_dir / original_filename
     idx = 1
     while target.exists():
-        target = project_dir / f"{base}-{idx}{file_ext}"
+        target = project_dir / f"{file_stem}-{idx}{file_ext}"
         idx += 1
 
     with open(target, "wb") as buffer:
@@ -247,6 +254,88 @@ async def upload_skos_file(
     db.commit()
 
     return {"message": "SKOS file uploaded successfully", "file_path": str(target), "total_skos_files": len(skos_files)}
+
+
+@router.post("/{project_id}/upload-existing-mapping")
+async def upload_existing_mapping(
+    project_id: str,
+    file: UploadFile = File(...),
+    chunk_size: int = Query(10000, description="Chunk size for processing"),
+    on_error: str = Query("report", description="Error handling: report, skip, fail"),
+    skip_empty_values: bool = Query(True, description="Skip empty values"),
+    aggregate_duplicates: bool = Query(True, description="Aggregate duplicate triples"),
+    db: Session = Depends(get_db),
+):
+    """Upload existing RML or YARRRML mapping file and create v2 config wrapper."""
+    import yaml
+    project = _get_project(db, project_id)
+
+    # Validate file type
+    allowed_extensions = [".ttl", ".rdf", ".nt", ".n3", ".xml", ".yaml", ".yml"]
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
+        )
+
+    # Determine format
+    is_rml = file_ext in ['.ttl', '.rdf', '.nt', '.n3', '.xml']
+    format_name = "RML" if is_rml else "YARRRML"
+
+    # Save mapping file - preserve original filename
+    project_dir = Path(settings.UPLOAD_DIR) / project_id
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use original filename to preserve user's naming convention
+    original_filename = Path(file.filename).name
+    mapping_path = project_dir / original_filename
+
+    with open(mapping_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Create v2 config wrapper with RELATIVE paths and user-configured options
+    v2_config = {
+        'options': {
+            'on_error': on_error,
+            'skip_empty_values': skip_empty_values,
+            'chunk_size': chunk_size,
+            'aggregate_duplicates': aggregate_duplicates,
+            'output_format': 'ttl'
+        },
+        'mapping': {
+            'file': original_filename  # Just filename, not full path
+        }
+    }
+
+    # Add ontology import if exists - use RELATIVE path
+    if project.ontology_file:
+        # Convert absolute path to just filename (they're in same directory)
+        ontology_filename = Path(project.ontology_file).name
+        v2_config['imports'] = [ontology_filename]
+
+    # Save config
+    config_path = project_dir / "mapping_config.yaml"
+    with open(config_path, 'w') as f:
+        f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+        f.write("# RDFMap v2 Configuration (Imported Existing Mapping)\n")
+        f.write("# ════════════════════════════════════════════════════════════════════════════════\n")
+        f.write("#\n")
+        f.write("# Created by: Web UI import\n")
+        f.write(f"# Format: v2 + External {format_name}\n")
+        f.write(f"# Mapping file: {original_filename}\n")
+        if project.ontology_file:
+            f.write(f"# Ontology file: {ontology_filename}\n")
+        f.write("#\n")
+        f.write("# ════════════════════════════════════════════════════════════════════════════════\n\n")
+        yaml.dump(v2_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+    return {
+        "message": f"{format_name} mapping imported successfully",
+        "mapping_file": str(mapping_path),
+        "config_file": str(config_path),
+        "format": format_name
+    }
 
 
 @router.get("/{project_id}/data-preview")
@@ -352,3 +441,171 @@ async def remove_shapes_file(project_id: str, db: Session = Depends(get_db)):
         except Exception:
             pass
     return {"message": "Shapes file removed", "config": cfg}
+
+
+@router.get("/{project_id}/files/{filename}")
+async def get_project_file(project_id: str, filename: str, db: Session = Depends(get_db)):
+    """Get content of a file in the project directory (e.g., RML/YARRRML mapping)."""
+    project = _get_project(db, project_id)
+
+    # Look in both DATA_DIR and UPLOAD_DIR
+    project_dirs = [
+        Path(settings.DATA_DIR) / project_id,
+        Path(settings.UPLOAD_DIR) / project_id
+    ]
+
+    for project_dir in project_dirs:
+        file_path = project_dir / filename
+        if file_path.exists():
+            try:
+                content = file_path.read_text(encoding='utf-8')
+                return Response(content=content, media_type='text/plain')
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+    raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+
+
+@router.get("/{project_id}/mapping-preview")
+async def get_mapping_preview(project_id: str, limit: int = Query(50, description="Max lines to preview"), db: Session = Depends(get_db)):
+    """Get preview of mapping file (first N lines)."""
+    import yaml
+
+    project = _get_project(db, project_id)
+
+    # Find mapping config
+    project_dirs = [
+        Path(settings.DATA_DIR) / project_id,
+        Path(settings.UPLOAD_DIR) / project_id
+    ]
+
+    mapping_content = None
+    mapping_format = "unknown"
+
+    for project_dir in project_dirs:
+        config_file = project_dir / "mapping_config.yaml"
+        if config_file.exists():
+            try:
+                config = yaml.safe_load(config_file.read_text())
+                if config.get('mapping', {}).get('file'):
+                    # External mapping file
+                    mapping_file = project_dir / config['mapping']['file']
+                    if mapping_file.exists():
+                        mapping_content = mapping_file.read_text(encoding='utf-8')
+                        ext = mapping_file.suffix.lower()
+                        mapping_format = "RML" if ext in ['.ttl', '.rdf', '.nt', '.n3'] else "YARRRML"
+                        break
+                elif config.get('mapping', {}).get('sources'):
+                    # Inline v2 format
+                    mapping_content = config_file.read_text(encoding='utf-8')
+                    mapping_format = "v2-inline"
+                    break
+            except Exception:
+                continue
+
+    if not mapping_content:
+        raise HTTPException(status_code=404, detail="No mapping found")
+
+    # Limit preview to N lines
+    lines = mapping_content.split('\n')
+    preview_lines = lines[:limit]
+    is_truncated = len(lines) > limit
+
+    return {
+        "format": mapping_format,
+        "preview": '\n'.join(preview_lines),
+        "total_lines": len(lines),
+        "showing_lines": len(preview_lines),
+        "is_truncated": is_truncated
+    }
+
+
+@router.delete("/{project_id}/data-file")
+async def delete_data_file(project_id: str, db: Session = Depends(get_db)):
+    """Delete uploaded data file."""
+    project = _get_project(db, project_id)
+
+    if not project.data_file:
+        raise HTTPException(status_code=404, detail="No data file to delete")
+
+    data_file_path = Path(project.data_file)
+
+    # Delete file
+    try:
+        if data_file_path.exists():
+            data_file_path.unlink()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
+
+    # Update database
+    project.data_file = None
+    project.status = "created"
+    db.commit()
+
+    return {"message": "Data file deleted successfully"}
+
+
+@router.delete("/{project_id}/ontology-file")
+async def delete_ontology_file(project_id: str, db: Session = Depends(get_db)):
+    """Delete uploaded ontology file."""
+    project = _get_project(db, project_id)
+
+    if not project.ontology_file:
+        raise HTTPException(status_code=404, detail="No ontology file to delete")
+
+    ontology_file_path = Path(project.ontology_file)
+
+    # Delete file
+    try:
+        if ontology_file_path.exists():
+            ontology_file_path.unlink()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
+
+    # Update database
+    project.ontology_file = None
+    project.status = "created"
+    db.commit()
+
+    return {"message": "Ontology file deleted successfully"}
+
+
+@router.delete("/{project_id}/mapping-file")
+async def delete_mapping_file(project_id: str, db: Session = Depends(get_db)):
+    """Delete uploaded mapping file and config."""
+    import yaml
+
+    project = _get_project(db, project_id)
+
+    # Find and delete mapping files
+    project_dirs = [
+        Path(settings.DATA_DIR) / project_id,
+        Path(settings.UPLOAD_DIR) / project_id
+    ]
+
+    deleted_files = []
+
+    for project_dir in project_dirs:
+        config_file = project_dir / "mapping_config.yaml"
+        if config_file.exists():
+            try:
+                config = yaml.safe_load(config_file.read_text())
+                if config.get('mapping', {}).get('file'):
+                    # Delete external mapping file
+                    mapping_file = project_dir / config['mapping']['file']
+                    if mapping_file.exists():
+                        mapping_file.unlink()
+                        deleted_files.append(str(mapping_file))
+
+                # Delete config file
+                config_file.unlink()
+                deleted_files.append(str(config_file))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error deleting files: {str(e)}")
+
+    if not deleted_files:
+        raise HTTPException(status_code=404, detail="No mapping files to delete")
+
+    return {"message": "Mapping files deleted successfully", "deleted": deleted_files}
+
+

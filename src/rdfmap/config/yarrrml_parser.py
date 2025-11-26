@@ -62,7 +62,9 @@ def yarrrml_to_internal(yarrrml: Dict[str, Any], config_dir: Path) -> Dict[str, 
     sources = yarrrml.get('sources', {})
     mappings = yarrrml.get('mappings', {})
 
+    # First pass: Convert all mappings to sheets
     sheets = []
+    mapping_dict = {}  # Store by name for relationship resolution
     for mapping_name, mapping_config in mappings.items():
         sheet = _convert_mapping_to_sheet(
             mapping_name,
@@ -73,8 +75,72 @@ def yarrrml_to_internal(yarrrml: Dict[str, Any], config_dir: Path) -> Dict[str, 
         )
         if sheet:
             sheets.append(sheet)
+            mapping_dict[mapping_name] = sheet
 
-    internal['sheets'] = sheets
+    # Second pass: Resolve relationship references
+    for sheet in sheets:
+        if '_relationship_refs' in sheet:
+            objects = {}
+            for rel_ref in sheet['_relationship_refs']:
+                child_mapping_name = rel_ref['child_mapping']
+                predicate = rel_ref['predicate']
+
+                # Find the child mapping
+                if child_mapping_name in mapping_dict:
+                    child_sheet = mapping_dict[child_mapping_name]
+
+                    # Create object entry
+                    # Extract a friendly name from the child mapping name
+                    obj_name = child_mapping_name.replace(f"{sheet['name']}_", "")
+
+                    obj_config = {
+                        'predicate': predicate,
+                        'class': child_sheet.get('row_resource', {}).get('class', ''),
+                        'iri_template': child_sheet.get('row_resource', {}).get('iri_template', ''),
+                        'properties': []
+                    }
+
+                    # Convert child columns to object properties
+                    for col_name, col_config in child_sheet.get('columns', {}).items():
+                        prop = {
+                            'column': col_name,
+                            'as': col_config.get('as', '')
+                        }
+                        if 'datatype' in col_config:
+                            prop['datatype'] = col_config['datatype']
+                        if 'required' in col_config:
+                            prop['required'] = col_config['required']
+                        obj_config['properties'].append(prop)
+
+                    objects[obj_name] = obj_config
+
+            if objects:
+                sheet['objects'] = objects
+
+            # Remove temporary field
+            del sheet['_relationship_refs']
+
+    # Filter out child-only mappings (those that are referenced as objects)
+    # Keep only parent mappings
+    parent_sheets = []
+    child_mapping_names = set()
+
+    # Identify child mappings
+    for sheet in sheets:
+        if 'objects' in sheet:
+            for obj_config in sheet['objects'].values():
+                # Find the original child mapping name
+                for mapping_name, mapped_sheet in mapping_dict.items():
+                    if (mapped_sheet.get('row_resource', {}).get('class') == obj_config['class'] and
+                        mapped_sheet.get('row_resource', {}).get('iri_template') == obj_config['iri_template']):
+                        child_mapping_names.add(mapping_name)
+
+    # Keep only parent sheets (not child mappings)
+    for sheet in sheets:
+        if sheet['name'] not in child_mapping_names:
+            parent_sheets.append(sheet)
+
+    internal['sheets'] = parent_sheets
 
     # Convert options if present
     internal['options'] = _extract_options(yarrrml)
@@ -149,8 +215,9 @@ def _convert_mapping_to_sheet(
                 'iri_template': iri_template
             }
 
-    # Convert predicate-object pairs to columns
+    # Convert predicate-object pairs to columns and detect relationships
     columns = {}
+    relationship_refs = []  # Track references to child mappings
     po_array = mapping_config.get('po', [])
 
     for po_entry in po_array:
@@ -162,6 +229,18 @@ def _convert_mapping_to_sheet(
 
         # Skip rdf:type (already handled)
         if predicate == 'a':
+            continue
+
+        # Check if this is a parent triples map reference (relationship)
+        # YARRRML format: [predicate, [child_mapping_name]]
+        if isinstance(object_value, list) and len(object_value) > 0:
+            # This is a reference to another mapping (relationship)
+            child_mapping_name = object_value[0]
+            predicate_uri = _expand_uri(predicate, namespaces)
+            relationship_refs.append({
+                'predicate': predicate_uri,
+                'child_mapping': child_mapping_name
+            })
             continue
 
         # Extract column name from $(column) or $(Column Name)
@@ -194,9 +273,9 @@ def _convert_mapping_to_sheet(
     if columns:
         sheet['columns'] = columns
 
-    # Handle object properties (relationships) if this is a sub-mapping
-    # YARRRML often splits these into separate mappings with naming convention
-    # For now, we handle simple cases
+    # Store relationship references for later resolution
+    if relationship_refs:
+        sheet['_relationship_refs'] = relationship_refs
 
     return sheet
 

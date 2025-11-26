@@ -40,8 +40,12 @@ const ManualMappingModal: React.FC<ManualMappingModalProps> = ({
   const [selected, setSelected] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
+    // Safely handle undefined or empty properties
+    if (!properties || properties.length === 0) return [];
+
     const q = query.trim().toLowerCase();
     if (!q) return properties;
+
     return properties.filter(p => {
       const localName = p.uri.split('#').pop()?.split('/').pop() || p.uri;
       return (p.label || '').toLowerCase().includes(q) || localName.toLowerCase().includes(q);
@@ -77,8 +81,15 @@ const ManualMappingModal: React.FC<ManualMappingModalProps> = ({
             placeholder="Type part of label or local name..."
           />
           <Box sx={{ maxHeight: 340, overflow: 'auto', border: '1px solid', borderColor: 'divider', p:1, borderRadius:1 }}>
-            <Stack spacing={1}>
-              {filtered.slice(0,400).map(p => {
+            {filtered.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
+                {properties && properties.length > 0
+                  ? 'No properties match your search'
+                  : 'No ontology properties available. Please upload an ontology first.'}
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {filtered.slice(0,400).map(p => {
                 const localName = p.uri.split('#').pop()?.split('/').pop() || p.uri;
                 const isSelected = selected === p.uri;
                 return (
@@ -107,13 +118,11 @@ const ManualMappingModal: React.FC<ManualMappingModalProps> = ({
                   </Box>
                 );
               })}
-              {filtered.length === 0 && (
-                <Typography variant="caption" color="text.secondary">No properties match your search.</Typography>
-              )}
               {filtered.length > 400 && (
                 <Typography variant="caption" color="text.secondary">Showing first 400 results, refine search to narrow further.</Typography>
               )}
-            </Stack>
+              </Stack>
+            )}
           </Box>
           <Divider />
           <Typography variant="caption" color="text.secondary">

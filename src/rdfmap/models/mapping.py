@@ -99,6 +99,12 @@ class SheetMapping(BaseModel):
     objects: Dict[str, LinkedObject] = Field(
         default_factory=dict, description="Linked object configurations"
     )
+    iterator: Optional[str] = Field(
+        None, description="XPath/JSONPath iterator for XML/JSON data sources"
+    )
+    format: Optional[str] = Field(
+        None, description="Data format (csv, json, xml) - auto-detected if not specified"
+    )
     filter_condition: Optional[str] = Field(
         None, description="Optional condition to filter rows (not implemented in v1)"
     )
@@ -144,7 +150,14 @@ class DefaultsConfig(BaseModel):
 
 
 class MappingConfig(BaseModel):
-    """Root mapping configuration schema."""
+    """Root mapping configuration schema.
+
+    Supports two modes:
+    1. Inline mapping: Full configuration with sheets defined inline
+    2. External mapping: Reference to external RML/YARRRML file with config options
+
+    When using external mapping file, the 'sheets' field is populated from the referenced file.
+    """
 
     namespaces: Dict[str, str] = Field(
         ..., description="Namespace prefix to IRI mappings"
@@ -153,7 +166,16 @@ class MappingConfig(BaseModel):
         None, description="List of ontology files to import (file paths or URIs)"
     )
     defaults: DefaultsConfig = Field(..., description="Default configuration values")
-    sheets: List[SheetMapping] = Field(..., description="Sheet/file mappings")
+
+    # Either sheets OR mapping_file must be provided
+    sheets: Optional[List[SheetMapping]] = Field(
+        None, description="Sheet/file mappings (inline mode)"
+    )
+    mapping_file: Optional[str] = Field(
+        None,
+        description="Path to external RML or YARRRML mapping file (external mode)"
+    )
+
     validation: Optional[ValidationConfig] = Field(None, description="Validation configuration")
     options: ProcessingOptions = Field(
         default_factory=ProcessingOptions, description="Processing options"
@@ -170,19 +192,34 @@ class MappingConfig(BaseModel):
         return v
 
     @model_validator(mode="after")
+    def validate_sheets_or_mapping_file(self) -> "MappingConfig":
+        """Ensure either sheets or mapping_file is provided, but not both."""
+        has_sheets = self.sheets is not None and len(self.sheets) > 0
+        has_mapping_file = self.mapping_file is not None
+
+        if not has_sheets and not has_mapping_file:
+            raise ValueError("Either 'sheets' (inline mapping) or 'mapping_file' (external mapping) must be provided")
+
+        if has_sheets and has_mapping_file:
+            raise ValueError("Cannot specify both 'sheets' and 'mapping_file'. Use one or the other.")
+
+        return self
+
+    @model_validator(mode="after")
     def validate_iri_templates(self) -> "MappingConfig":
         """Validate that IRI templates reference valid columns."""
-        for sheet in self.sheets:
-            # Collect all available column names
-            available_cols = set(sheet.columns.keys())
-            
-            # Add columns referenced in objects
-            for obj in sheet.objects.values():
-                for prop in obj.properties:
-                    available_cols.add(prop.column)
-            
-            # Note: Full validation of template variables would require parsing
-            # the actual data, so we do basic checks here
+        if self.sheets:
+            for sheet in self.sheets:
+                # Collect all available column names
+                available_cols = set(sheet.columns.keys())
+
+                # Add columns referenced in objects
+                for obj in sheet.objects.values():
+                    for prop in obj.properties:
+                        available_cols.add(prop.column)
+
+                # Note: Full validation of template variables would require parsing
+                # the actual data, so we do basic checks here
         return self
 
     class Config:

@@ -11,6 +11,14 @@ class Settings(BaseSettings):
     # API Settings
     API_V1_STR: str = "/api"
     PROJECT_NAME: str = "RDFMap Web"
+    API_PORT: int = 8000  # Backend API port
+
+    # Environment
+    ENVIRONMENT: str = "development"
+    DEBUG: bool = False
+
+    # Frontend
+    VITE_API_URL: str = "http://localhost:8000"  # API URL for frontend
 
     # CORS
     CORS_ORIGINS: Union[List[str], str] = [
@@ -30,6 +38,9 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql://rdfmap:rdfmap@db:5432/rdfmap"
+    POSTGRES_USER: str = "rdfmap"
+    POSTGRES_PASSWORD: str = "change-me-in-production"
+    POSTGRES_DB: str = "rdfmap"
 
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
@@ -56,6 +67,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
+        extra='forbid',  # Strict: reject unknown environment variables
     )
 
 

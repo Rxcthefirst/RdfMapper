@@ -135,55 +135,94 @@ class RDFMapService:
         return mapping_config
 
     def summarize_mapping(self, mapping_config: dict) -> dict:
-        """Produce summary (counts, per-sheet mapping stats) including object properties."""
+        """Produce summary (counts, per-sheet mapping stats) including object properties.
+
+        Supports both v1 (sheets) and v2 (mapping.sources) formats.
+        """
         if not isinstance(mapping_config, dict):
             return {}
+
         summary_sheets = []
         total_columns = 0
         mapped_columns = 0
 
-        for sheet in mapping_config.get('sheets', []):
-            # Count direct column mappings (data properties on main resource)
-            cols = sheet.get('columns', {}) or {}
-            direct_mapped = [name for name, val in cols.items() if isinstance(val, dict) and val.get('as')]
+        # Detect format and get sources/sheets
+        if "mapping" in mapping_config and isinstance(mapping_config["mapping"], dict):
+            # V2 format
+            sources = mapping_config["mapping"].get("sources", [])
+            use_v2 = True
+        else:
+            # V1 format
+            sources = mapping_config.get('sheets', [])
+            use_v2 = False
 
-            # Count object property mappings
-            objects = sheet.get('objects', {}) or {}
+        for source in sources:
+            if use_v2:
+                # V2 format: properties, relationships
+                props = source.get('properties', {}) or {}
+                direct_mapped = [name for name, val in props.items() if isinstance(val, dict) and val.get('predicate')]
 
-            # Collect all unique columns used in objects (both FK columns in iri_template and data property columns)
-            object_columns_set = set()
-            for obj_name, obj_config in objects.items():
-                if isinstance(obj_config, dict):
-                    # Extract column names from iri_template (e.g., {BorrowerID})
-                    # Exclude common template variables like base_iri
-                    iri_template = obj_config.get('iri_template', '')
-                    import re
-                    fk_cols = re.findall(r'{(\w+)}', iri_template)
-                    # Filter out known template variables
-                    fk_cols = [col for col in fk_cols if col not in ('base_iri', 'base_uri', 'namespace')]
-                    object_columns_set.update(fk_cols)
+                # Count relationships
+                relationships = source.get('relationships', []) or []
 
-                    # Add columns from object properties
-                    properties = obj_config.get('properties', []) or []
-                    for prop in properties:
-                        if isinstance(prop, dict):
-                            col = prop.get('column')
-                            if col:
-                                object_columns_set.add(col)
+                # Collect all unique columns used in relationships
+                object_columns_set = set()
+                for rel in relationships:
+                    if isinstance(rel, dict):
+                        # Extract column names from iri_template
+                        iri_template = rel.get('iri_template', '')
+                        import re
+                        fk_cols = re.findall(r'{(\w+)}', iri_template)
+                        fk_cols = [col for col in fk_cols if col not in ('base_iri', 'base_uri', 'namespace')]
+                        object_columns_set.update(fk_cols)
 
-            object_columns = list(object_columns_set)
+                        # Add columns from relationship properties
+                        rel_props = rel.get('properties', {}) or {}
+                        for col_name in rel_props.keys():
+                            object_columns_set.add(col_name)
 
-            # Total unique columns in the sheet = direct columns + object columns
+                object_columns = list(object_columns_set)
+                object_count = len(relationships)
+            else:
+                # V1 format: columns, objects
+                cols = source.get('columns', {}) or {}
+                direct_mapped = [name for name, val in cols.items() if isinstance(val, dict) and val.get('as')]
+
+                # Count object property mappings
+                objects = source.get('objects', {}) or {}
+
+                # Collect all unique columns used in objects
+                object_columns_set = set()
+                for obj_name, obj_config in objects.items():
+                    if isinstance(obj_config, dict):
+                        iri_template = obj_config.get('iri_template', '')
+                        import re
+                        fk_cols = re.findall(r'{(\w+)}', iri_template)
+                        fk_cols = [col for col in fk_cols if col not in ('base_iri', 'base_uri', 'namespace')]
+                        object_columns_set.update(fk_cols)
+
+                        # Add columns from object properties
+                        properties = obj_config.get('properties', []) or []
+                        for prop in properties:
+                            if isinstance(prop, dict):
+                                col = prop.get('column')
+                                if col:
+                                    object_columns_set.add(col)
+
+                object_columns = list(object_columns_set)
+                object_count = len(objects)
+
+            # Total unique columns = direct columns + object columns
             all_column_names = set(direct_mapped) | object_columns_set
             sheet_total = len(all_column_names)
             sheet_mapped = len(all_column_names)  # All columns we know about are mapped
 
             summary_sheets.append({
-                'sheet': sheet.get('name'),
+                'sheet': source.get('name'),
                 'total_columns': sheet_total,
                 'mapped_columns': sheet_mapped,
                 'direct_mappings': direct_mapped,
-                'object_properties': len(objects),
+                'object_properties': object_count,
                 'object_columns': object_columns,
             })
 
@@ -209,6 +248,7 @@ class RDFMapService:
         base_iri: str = "http://example.org/",
         use_semantic: bool = True,
         min_confidence: float = 0.5,
+        output_format: str = "inline",  # NEW: inline, rml/ttl, rml/xml, yarrrml
     ) -> Dict[str, Any]:
         """
         Generate automatic mappings between data and ontology.
@@ -221,12 +261,13 @@ class RDFMapService:
             base_iri: Base IRI for generated resources
             use_semantic: Whether to use semantic matching
             min_confidence: Minimum confidence threshold
+            output_format: Output format - inline (v2 default), rml/ttl, rml/xml, yarrrml
 
         Returns:
             Dictionary with generated mappings and alignment report
         """
         try:
-            logger.info(f"Generating mappings for project {project_id}")
+            logger.info(f"Generating mappings for project {project_id} with format {output_format}")
             config = GeneratorConfig(base_iri=base_iri, min_confidence=min_confidence, imports=[ontology_file_path])
             generator = MappingGenerator(
                 ontology_file=ontology_file_path,
@@ -235,33 +276,177 @@ class RDFMapService:
                 use_semantic_matching=use_semantic,
             )
             mapping_config, alignment_report = generator.generate_with_alignment_report(target_class=target_class)
+
             project_dir = self.data_dir / project_id
             project_dir.mkdir(parents=True, exist_ok=True)
-            mapping_file = project_dir / "mapping_config.yaml"
-            if isinstance(mapping_config, dict):
-                mapping_config.setdefault('defaults', {}).setdefault('base_iri', base_iri)
-                # Ensure ontology import is present for validation
-                imports = mapping_config.get('imports') or []
-                if ontology_file_path not in imports:
-                    imports.append(ontology_file_path)
-                # Include SKOS files from project config if available
+
+            # Generate in requested format
+            if output_format == "inline":
+                # v2 inline format
+                from rdfmap.config.v2_generator import internal_to_v2_config
+
+                # Add SKOS files from project config if available
+                imports_list = [ontology_file_path]
                 try:
                     from ..database import SessionLocal
                     from ..models.project import Project
                     db = SessionLocal()
                     proj = db.get(Project, project_id)
-                    skos_files = []
                     if proj and proj.config and isinstance(proj.config, dict):
                         skos_files = list(proj.config.get('skos_files', []) or [])
+                        imports_list.extend(skos_files)
                     db.close()
-                    for sk in skos_files:
-                        if sk not in imports:
-                            imports.append(sk)
                 except Exception as e:
                     logger.warning(f"Failed to include SKOS files in imports: {e}")
-                mapping_config['imports'] = imports
-            generator.mapping = mapping_config
-            generator.save_yaml(str(mapping_file))
+
+                v2_config = internal_to_v2_config(
+                    mapping_config,
+                    base_iri=base_iri,
+                    alignment_report=alignment_report.dict() if alignment_report else None,
+                    imports=imports_list,
+                    validation_enabled=False,
+                    shapes_file=None
+                )
+
+                mapping_file = project_dir / "mapping_config.yaml"
+                import yaml
+                with open(mapping_file, 'w') as f:
+                    f.write("# RDFMap v2 Configuration (Generated via Web UI)\n")
+                    f.write("# Format: inline mapping\n\n")
+                    yaml.dump(v2_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+                final_config = v2_config
+
+            elif output_format in ["rml/ttl", "rml/xml"]:
+                # v2 with external RML
+                from rdfmap.config.rml_generator import internal_to_rml
+                from rdfmap.config.v2_generator import internal_to_v2_with_external
+
+                # Generate RML file
+                rml_format = 'xml' if output_format == "rml/xml" else 'turtle'
+                rml_ext = '.rml.rdf' if output_format == "rml/xml" else '.rml.ttl'
+                rml_file = project_dir / f"mapping{rml_ext}"
+
+                rml_content, alignment_json = internal_to_rml(
+                    mapping_config,
+                    alignment_report.dict() if alignment_report else None,
+                    format=rml_format
+                )
+
+                with open(rml_file, 'w') as f:
+                    f.write(rml_content)
+
+                # Generate v2 config referencing RML
+                imports_list = [ontology_file_path]
+                try:
+                    from ..database import SessionLocal
+                    from ..models.project import Project
+                    db = SessionLocal()
+                    proj = db.get(Project, project_id)
+                    if proj and proj.config and isinstance(proj.config, dict):
+                        skos_files = list(proj.config.get('skos_files', []) or [])
+                        imports_list.extend(skos_files)
+                    db.close()
+                except Exception as e:
+                    logger.warning(f"Failed to include SKOS files in imports: {e}")
+
+                v2_config = internal_to_v2_with_external(
+                    mapping_config,
+                    base_iri=base_iri,
+                    mapping_file_path=rml_file.name,
+                    alignment_report=alignment_report.dict() if alignment_report else None,
+                    imports=imports_list,
+                    validation_enabled=False,
+                    shapes_file=None
+                )
+
+                mapping_file = project_dir / "mapping_config.yaml"
+                import yaml
+                with open(mapping_file, 'w') as f:
+                    f.write(f"# RDFMap v2 Configuration (Generated via Web UI)\n")
+                    f.write(f"# Format: external {rml_format.upper()}\n")
+                    f.write(f"# RML file: {rml_file.name}\n\n")
+                    yaml.dump(v2_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+                final_config = v2_config
+
+            elif output_format == "yarrrml":
+                # v2 with external YARRRML
+                from rdfmap.config.yarrrml_generator import internal_to_yarrrml
+                from rdfmap.config.v2_generator import internal_to_v2_with_external
+
+                # Generate YARRRML file
+                yarrrml_file = project_dir / "mapping_yarrrml.yaml"
+                yarrrml_dict = internal_to_yarrrml(
+                    mapping_config,
+                    alignment_report.dict() if alignment_report else None
+                )
+
+                import yaml
+                with open(yarrrml_file, 'w') as f:
+                    yaml.dump(yarrrml_dict, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+                # Generate v2 config referencing YARRRML
+                imports_list = [ontology_file_path]
+                try:
+                    from ..database import SessionLocal
+                    from ..models.project import Project
+                    db = SessionLocal()
+                    proj = db.get(Project, project_id)
+                    if proj and proj.config and isinstance(proj.config, dict):
+                        skos_files = list(proj.config.get('skos_files', []) or [])
+                        imports_list.extend(skos_files)
+                    db.close()
+                except Exception as e:
+                    logger.warning(f"Failed to include SKOS files in imports: {e}")
+
+                v2_config = internal_to_v2_with_external(
+                    mapping_config,
+                    base_iri=base_iri,
+                    mapping_file_path=yarrrml_file.name,
+                    alignment_report=alignment_report.dict() if alignment_report else None,
+                    imports=imports_list,
+                    validation_enabled=False,
+                    shapes_file=None
+                )
+
+                mapping_file = project_dir / "mapping_config.yaml"
+                with open(mapping_file, 'w') as f:
+                    f.write("# RDFMap v2 Configuration (Generated via Web UI)\n")
+                    f.write("# Format: external YARRRML\n")
+                    f.write(f"# YARRRML file: {yarrrml_file.name}\n\n")
+                    yaml.dump(v2_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+                final_config = v2_config
+            else:
+                # Fallback to old v1 format for backward compatibility
+                logger.warning(f"Unknown format {output_format}, using v1 format")
+                if isinstance(mapping_config, dict):
+                    mapping_config.setdefault('defaults', {}).setdefault('base_iri', base_iri)
+                    imports = mapping_config.get('imports') or []
+                    if ontology_file_path not in imports:
+                        imports.append(ontology_file_path)
+                    try:
+                        from ..database import SessionLocal
+                        from ..models.project import Project
+                        db = SessionLocal()
+                        proj = db.get(Project, project_id)
+                        skos_files = []
+                        if proj and proj.config and isinstance(proj.config, dict):
+                            skos_files = list(proj.config.get('skos_files', []) or [])
+                        db.close()
+                        for sk in skos_files:
+                            if sk not in imports:
+                                imports.append(sk)
+                    except Exception as e:
+                        logger.warning(f"Failed to include SKOS files in imports: {e}")
+                    mapping_config['imports'] = imports
+
+                generator.mapping = mapping_config
+                mapping_file = project_dir / "mapping_config.yaml"
+                generator.save_yaml(str(mapping_file))
+                final_config = mapping_config
+
             # Export alignment report artifacts
             report_json = self.data_dir / project_id / 'alignment_report.json'
             report_html = self.data_dir / project_id / 'alignment_report.html'
@@ -272,7 +457,9 @@ class RDFMapService:
                     generator.export_alignment_html(str(report_html))
             except Exception as e:
                 logger.warning(f"Failed to export alignment report: {e}")
-            summary = self.summarize_mapping(mapping_config)
+
+            summary = self.summarize_mapping(final_config)
+
             # Extract match details for UI convenience
             match_details = []
             try:
@@ -280,14 +467,16 @@ class RDFMapService:
                     match_details = [md.dict() for md in alignment_report.match_details]
             except Exception as e:
                 logger.warning(f"Failed to serialize match details: {e}")
+
             return {
-                "mapping_config": mapping_config,
+                "mapping_config": final_config,
                 "mapping_file": str(mapping_file),
                 "alignment_report": alignment_report.to_dict() if alignment_report else {},
                 "alignment_report_json": str(report_json),
                 "alignment_report_html": str(report_html),
                 "mapping_summary": summary,
                 "match_details": match_details,
+                "output_format": output_format,
             }
         except Exception as e:
             logger.error(f"Error generating mappings: {e}", exc_info=True)
@@ -349,6 +538,19 @@ class RDFMapService:
             # For each sheet, parse its source into DataFrames and add to builder
             for sheet in config.sheets:
                 source_path = Path(sheet.source)
+
+                # If source is not absolute, look in uploads directory first, then data directory
+                if not source_path.is_absolute():
+                    uploads_source = self.uploads_dir / project_id / source_path.name
+                    data_source = self.data_dir / project_id / source_path.name
+
+                    if uploads_source.exists():
+                        source_path = uploads_source
+                    elif data_source.exists():
+                        source_path = data_source
+                    else:
+                        raise FileNotFoundError(f"Data source file not found: {sheet.source}")
+
                 parser = create_parser(source_path)
                 dataframes = list(parser.parse())
                 for df in dataframes:
@@ -366,6 +568,7 @@ class RDFMapService:
 
             # Save RDF output
             project_dir = self.data_dir / project_id
+            project_dir.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
             output_file = project_dir / f"output.{ext}"
 
             graph = builder.get_graph()

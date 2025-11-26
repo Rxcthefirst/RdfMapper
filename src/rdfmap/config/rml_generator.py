@@ -28,15 +28,16 @@ class RMLGenerator:
         self.graph.bind('rdf', RDF)
         self.graph.bind('rdfs', RDFS)
 
-    def generate(self, internal_config: Dict[str, Any]) -> str:
+    def generate(self, internal_config: Dict[str, Any], format: str = 'turtle') -> str:
         """
         Generate RML from internal mapping configuration.
 
         Args:
             internal_config: Internal mapping configuration dict
+            format: Output format - 'turtle' (default), 'xml' (RDF/XML), 'n3', 'nt', 'json-ld'
 
         Returns:
-            RML as Turtle string
+            RML as serialized string in requested format
         """
         # Bind namespaces from config
         if 'namespaces' in internal_config:
@@ -55,8 +56,21 @@ class RMLGenerator:
         for sheet in internal_config.get('sheets', []):
             self._generate_triples_map(sheet)
 
-        # Serialize to Turtle
-        return self.graph.serialize(format='turtle')
+        # Serialize to requested format
+        format_map = {
+            'turtle': 'turtle',
+            'ttl': 'turtle',
+            'xml': 'xml',
+            'rdf/xml': 'xml',
+            'rdfxml': 'xml',
+            'n3': 'n3',
+            'nt': 'nt',
+            'ntriples': 'nt',
+            'json-ld': 'json-ld',
+            'jsonld': 'json-ld',
+        }
+        rdf_format = format_map.get(format.lower(), 'turtle')
+        return self.graph.serialize(format=rdf_format)
 
     def _generate_triples_map(self, sheet: Dict[str, Any]):
         """Generate a TriplesMap from a sheet."""
@@ -304,22 +318,24 @@ class RMLGenerator:
         return URIRef(compact_uri)
 
 
-def generate_rml(internal_config: Dict[str, Any]) -> str:
+def generate_rml(internal_config: Dict[str, Any], format: str = 'turtle') -> str:
     """
     Convenience function to generate RML from internal config.
 
     Args:
         internal_config: Internal mapping configuration dict
+        format: Output format - 'turtle' (default), 'xml' (RDF/XML), 'n3', 'nt', 'json-ld'
 
     Returns:
-        RML as Turtle string
+        RML as serialized string in requested format
     """
     generator = RMLGenerator()
-    return generator.generate(internal_config)
+    return generator.generate(internal_config, format=format)
 
 
 def internal_to_rml(internal_config: Dict[str, Any],
-                   alignment_report: Optional[Dict] = None) -> tuple[str, Optional[str]]:
+                   alignment_report: Optional[Dict] = None,
+                   format: str = 'turtle') -> tuple[str, Optional[str]]:
     """
     Convert internal mapping format to RML and separate alignment report.
 
@@ -328,19 +344,29 @@ def internal_to_rml(internal_config: Dict[str, Any],
     Args:
         internal_config: Internal mapping configuration dict
         alignment_report: Optional alignment report with AI metadata
+        format: Output format - 'turtle' (default), 'xml' (RDF/XML), 'n3', 'nt', 'json-ld'
 
     Returns:
         Tuple of (RML string, alignment_report_json_string or None)
     """
     # Generate clean RML (no x-alignment embedded)
-    rml_content = generate_rml(internal_config)
+    rml_content = generate_rml(internal_config, format=format)
 
     # Generate separate alignment report if provided
     alignment_json = None
     if alignment_report:
         import json
+        from datetime import datetime, date
+
+        # Custom encoder to handle datetime objects
+        class DateTimeEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, (datetime, date)):
+                    return obj.isoformat()
+                return super().default(obj)
+
         # Keep alignment report as separate JSON
-        alignment_json = json.dumps(alignment_report, indent=2)
+        alignment_json = json.dumps(alignment_report, indent=2, cls=DateTimeEncoder)
 
     return rml_content, alignment_json
 

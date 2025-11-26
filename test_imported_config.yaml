@@ -1,0 +1,18 @@
+# ════════════════════════════════════════════════════════════════════════════════
+# RDFMap v2 Configuration (Imported Existing Mapping)
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# Created by: rdfmap init --existing-mapping
+# Format: v2 + External YARRRML
+# Mapping file: test_v2_external2_mapping.yaml
+#
+# ════════════════════════════════════════════════════════════════════════════════
+
+options:
+  on_error: report
+  skip_empty_values: true
+  chunk_size: 50000
+  aggregate_duplicates: true
+  output_format: ttl
+mapping:
+  file: test_v2_external2_mapping.yaml

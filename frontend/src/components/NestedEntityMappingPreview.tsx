@@ -130,34 +130,41 @@ const NestedEntityMappingPreview: React.FC<NestedEntityMappingPreviewProps> = ({
                     📊 Data Properties
                   </Typography>
                   <Stack spacing={0.5}>
-                    {Object.entries(properties).map(([columnName, propertyUri]: [string, any]) => (
-                      <Box
-                        key={columnName}
-                        sx={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          p: 1,
-                          borderRadius: 1,
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          '&:hover': { bgcolor: 'action.hover' }
-                        }}
-                      >
-                        <Typography variant="body2">
-                          <strong>{columnName}</strong> → {propertyUri}
-                        </Typography>
-                        {!readOnly && onEditProperty && (
-                          <IconButton
-                            size="small"
-                            onClick={() => onEditProperty(columnName, propertyUri)}
-                            title="Edit mapping"
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        )}
-                      </Box>
-                    ))}
+                    {Object.entries(properties).map(([columnName, propertyUri]: [string, any]) => {
+                      // Handle both string and object formats
+                      const propUriString = typeof propertyUri === 'string'
+                        ? propertyUri
+                        : propertyUri?.predicate || propertyUri?.property || String(propertyUri);
+
+                      return (
+                        <Box
+                          key={columnName}
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            p: 1,
+                            borderRadius: 1,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            '&:hover': { bgcolor: 'action.hover' }
+                          }}
+                        >
+                          <Typography variant="body2">
+                            <strong>{columnName}</strong> → {propUriString}
+                          </Typography>
+                          {!readOnly && onEditProperty && (
+                            <IconButton
+                              size="small"
+                              onClick={() => onEditProperty(columnName, propUriString)}
+                              title="Edit mapping"
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </Box>
+                      );
+                    })}
                   </Stack>
                 </Box>
 
@@ -215,36 +222,43 @@ const NestedEntityMappingPreview: React.FC<NestedEntityMappingPreviewProps> = ({
                               Properties:
                             </Typography>
                             <Stack spacing={0.5}>
-                              {Object.entries(nestedProperties).map(([colName, propUri]: [string, any]) => (
-                                <Box
-                                  key={colName}
-                                  sx={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    p: 0.5,
-                                    pl: 1,
-                                    borderRadius: 1,
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    bgcolor: 'background.paper',
-                                    '&:hover': { bgcolor: 'action.selected' }
-                                  }}
-                                >
-                                  <Typography variant="caption">
-                                    <strong>{colName}</strong> → {propUri}
-                                  </Typography>
-                                  {!readOnly && onEditNestedProperty && (
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => onEditNestedProperty(sourceIdx, nestedIdx, colName, propUri)}
-                                      title="Edit nested property"
-                                    >
-                                      <EditIcon fontSize="inherit" />
-                                    </IconButton>
-                                  )}
-                                </Box>
-                              ))}
+                              {Object.entries(nestedProperties).map(([colName, propUri]: [string, any]) => {
+                                // Handle both string and object formats
+                                const propUriString = typeof propUri === 'string'
+                                  ? propUri
+                                  : propUri?.predicate || propUri?.property || String(propUri);
+
+                                return (
+                                  <Box
+                                    key={colName}
+                                    sx={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      p: 0.5,
+                                      pl: 1,
+                                      borderRadius: 1,
+                                      border: '1px solid',
+                                      borderColor: 'divider',
+                                      bgcolor: 'background.paper',
+                                      '&:hover': { bgcolor: 'action.selected' }
+                                    }}
+                                  >
+                                    <Typography variant="caption">
+                                      <strong>{colName}</strong> → {propUriString}
+                                    </Typography>
+                                    {!readOnly && onEditNestedProperty && (
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => onEditNestedProperty(sourceIdx, nestedIdx, colName, propUriString)}
+                                        title="Edit nested property"
+                                      >
+                                        <EditIcon fontSize="inherit" />
+                                      </IconButton>
+                                    )}
+                                  </Box>
+                                );
+                              })}
                             </Stack>
                           </Box>
                         )
