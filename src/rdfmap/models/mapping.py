@@ -67,7 +67,11 @@ class LinkedObject(BaseModel):
     """Configuration for creating linked object resources."""
 
     predicate: str = Field(..., description="Object property linking main resource to this object")
-    class_type: str = Field(..., alias="class", description="RDF class for the linked object")
+    class_type: Union[str, List[str]] = Field(
+        ...,
+        alias="class",
+        description="RDF class(es) for the linked object. Can be single class or list of classes"
+    )
     iri_template: str = Field(..., description="IRI template for generating object IRIs")
     properties: List[ObjectPropertyMapping] = Field(
         default_factory=list, description="Properties of the linked object"
@@ -80,7 +84,11 @@ class LinkedObject(BaseModel):
 class RowResource(BaseModel):
     """Configuration for the main resource created from each row."""
 
-    class_type: str = Field(..., alias="class", description="RDF class for the resource")
+    class_type: Union[str, List[str]] = Field(
+        ...,
+        alias="class",
+        description="RDF class(es) for the resource. Can be single class or list of classes (e.g., for owl:NamedIndividual)"
+    )
     iri_template: str = Field(..., description="IRI template using column placeholders")
 
     class Config:

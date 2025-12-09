@@ -61,7 +61,11 @@ class RMLParser:
         return self._convert_to_internal()
 
     def _convert_to_internal(self) -> Dict[str, Any]:
-        """Convert RML graph to internal mapping format."""
+        """Convert RML graph to internal mapping format.
+
+        Optimization: Groups TriplesMaps by source file to avoid redundant processing.
+        Multiple TriplesMaps with the same source are merged into a single sheet.
+        """
         internal = {}
 
         # Extract namespaces
@@ -72,14 +76,33 @@ class RMLParser:
             'base_iri': self._extract_base_iri()
         }
 
-        # Extract triples maps and convert to sheets
+        # Extract triples maps and GROUP BY SOURCE FILE for optimization
         triples_maps = list(self.graph.subjects(RDF.type, RR.TriplesMap))
-        sheets = []
+
+        # First pass: Group TriplesMaps by source file
+        source_groups = {}  # source_key -> list of TriplesMaps
 
         for tm in triples_maps:
             sheet = self._convert_triples_map(tm)
             if sheet:
-                sheets.append(sheet)
+                # Create a unique key for this source
+                source_key = (sheet['source'], sheet.get('iterator', ''), sheet.get('format', 'csv'))
+
+                if source_key not in source_groups:
+                    source_groups[source_key] = []
+
+                source_groups[source_key].append(sheet)
+
+        # Second pass: Merge TriplesMaps with same source into single sheet
+        sheets = []
+        for source_key, sheet_group in source_groups.items():
+            if len(sheet_group) == 1:
+                # Only one TriplesMap for this source - use as is
+                sheets.append(sheet_group[0])
+            else:
+                # Multiple TriplesMaps for same source - merge them
+                merged = self._merge_sheets(sheet_group, source_key)
+                sheets.append(merged)
 
         internal['sheets'] = sheets
 
@@ -89,6 +112,56 @@ class RMLParser:
             internal['_x_alignment'] = alignment_data
 
         return internal
+
+    def _merge_sheets(self, sheets: List[Dict[str, Any]], source_key: tuple) -> Dict[str, Any]:
+        """Merge multiple TriplesMaps with the same source into a single sheet.
+
+        This optimization allows processing each source file only once,
+        generating all entity types in a single pass.
+
+        Args:
+            sheets: List of sheet configs with same source
+            source_key: (source, iterator, format) tuple
+
+        Returns:
+            Merged sheet configuration
+        """
+        # Use first sheet as base
+        merged = sheets[0].copy()
+
+        # Combine name to indicate multiple entities
+        entity_names = [s['name'] for s in sheets]
+        merged['name'] = f"{source_key[0].split('/')[-1].split('.')[0]}_merged"
+
+        # Track all columns and objects from all TriplesMaps
+        all_columns = {}
+        all_objects = {}
+
+        # Collect all columns and objects
+        for sheet in sheets:
+            all_columns.update(sheet.get('columns', {}))
+            all_objects.update(sheet.get('objects', {}))
+
+        merged['columns'] = all_columns
+        merged['objects'] = all_objects
+
+        # For row_resource, we need to handle multiple entity types
+        # Store additional entity types in metadata
+        merged['_entity_types'] = []
+        for sheet in sheets:
+            entity_info = {
+                'class': sheet['row_resource']['class'],
+                'iri_template': sheet['row_resource']['iri_template'],
+                'columns': list(sheet.get('columns', {}).keys()),
+                'objects': list(sheet.get('objects', {}).keys())
+            }
+            merged['_entity_types'].append(entity_info)
+
+        # Use first entity as primary row_resource
+        # (In practice, the graph builder will need to create multiple entities)
+        merged['row_resource'] = sheets[0]['row_resource']
+
+        return merged
 
     def _extract_namespaces(self) -> Dict[str, str]:
         """Extract namespace prefixes from RML graph."""
@@ -248,7 +321,10 @@ class RMLParser:
         return info
 
     def _extract_subject_map(self, subject_map: URIRef) -> Dict[str, Any]:
-        """Extract subject template and class information."""
+        """Extract subject template and class information.
+
+        Note: RML spec allows multiple rr:class statements. We extract all of them.
+        """
         info = {}
 
         # Get template
@@ -266,10 +342,13 @@ class RMLParser:
             else:
                 info['template'] = 'http://example.org/resource/{id}'
 
-        # Get class
-        rdf_class = self.graph.value(subject_map, RR['class'])
-        if rdf_class:
-            info['class'] = self._compact_uri(str(rdf_class))
+        # Get ALL classes (RML spec allows multiple rr:class statements)
+        rdf_classes = list(self.graph.objects(subject_map, RR['class']))
+        if rdf_classes:
+            # Extract all classes
+            classes = [self._compact_uri(str(cls)) for cls in rdf_classes]
+            # Store as single string if one class, or list if multiple
+            info['class'] = classes[0] if len(classes) == 1 else classes
         else:
             info['class'] = 'owl:Thing'
 

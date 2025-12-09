@@ -1,0 +1,7 @@
+options:
+  chunk_size: 1000
+  output_format: ttl
+
+mapping:
+  file: mapping_with_named_individual.rml.ttl
+

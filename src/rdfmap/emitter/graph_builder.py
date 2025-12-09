@@ -290,6 +290,9 @@ class RDFGraphBuilder:
     ) -> None:
         """Add Polars DataFrame to RDF graph with vectorized processing.
 
+        Optimization: Handles merged sheets with multiple entity types to avoid
+        redundant source file processing.
+
         Args:
             df: Polars DataFrame to process
             sheet: Sheet mapping configuration
@@ -306,18 +309,103 @@ class RDFGraphBuilder:
         # Future optimization: implement template rendering directly in Polars
         rows_data = df.to_dicts()
 
-        # Process each row (vectorized processing opportunities exist here)
-        for idx, row_data in enumerate(rows_data):
-            row_num = offset + idx + 1  # 1-indexed for users
+        # Check if this is a merged sheet with multiple entity types
+        entity_types = getattr(sheet, '_entity_types', None)
 
-            # Add main resource
-            main_resource = self._add_row_resource(sheet, row_data, row_num)
+        if entity_types:
+            # Merged sheet - create multiple entities per row
+            for idx, row_data in enumerate(rows_data):
+                row_num = offset + idx + 1
 
-            if main_resource:
-                # Add linked objects
-                self._add_linked_objects(main_resource, sheet, row_data, row_num)
+                # Create each entity type for this row
+                for entity_info in entity_types:
+                    self._add_entity_from_merged_sheet(
+                        entity_info,
+                        row_data,
+                        row_num,
+                        sheet
+                    )
 
                 self.report.total_rows += 1
+        else:
+            # Standard single-entity sheet processing
+            for idx, row_data in enumerate(rows_data):
+                row_num = offset + idx + 1  # 1-indexed for users
+
+                # Add main resource
+                main_resource = self._add_row_resource(sheet, row_data, row_num)
+
+                if main_resource:
+                    # Add linked objects
+                    self._add_linked_objects(main_resource, sheet, row_data, row_num)
+
+                    self.report.total_rows += 1
+
+    def _add_entity_from_merged_sheet(
+        self,
+        entity_info: Dict[str, Any],
+        row_data: Dict[str, Any],
+        row_num: int,
+        sheet: SheetMapping,
+    ) -> Optional[URIRef]:
+        """Create an entity from a merged sheet's entity type info.
+
+        Args:
+            entity_info: Entity type configuration with class, iri_template, columns, objects
+            row_data: Row data dictionary
+            row_num: Row number for error reporting
+            sheet: Original sheet for namespace resolution
+
+        Returns:
+            URIRef of created resource or None if creation failed
+        """
+        # Generate IRI for this entity
+        resource_iri = self._generate_iri(
+            entity_info['iri_template'],
+            row_data,
+            row_num,
+            f"entity {entity_info['class']}",
+        )
+
+        if not resource_iri:
+            return None
+
+        # Add rdf:type for declared class(es)
+        entity_class = entity_info['class']
+        if isinstance(entity_class, list):
+            for cls in entity_class:
+                class_uri = self._resolve_class(cls)
+                self.graph.add((resource_iri, RDF.type, class_uri))
+        else:
+            class_uri = self._resolve_class(entity_class)
+            self.graph.add((resource_iri, RDF.type, class_uri))
+
+        # Add data properties for this entity's columns
+        for col_name in entity_info.get('columns', []):
+            if col_name in sheet.columns:
+                col_mapping = sheet.columns[col_name]
+                self._add_column_value(
+                    resource_iri,
+                    col_mapping,
+                    row_data.get(col_name),
+                    row_num,
+                    f"{sheet.name}.{col_name}",
+                )
+
+        # Add object properties for this entity
+        for obj_name in entity_info.get('objects', []):
+            if obj_name in sheet.objects:
+                obj_config = sheet.objects[obj_name]
+                self._add_single_linked_object(
+                    resource_iri,
+                    obj_name,
+                    obj_config,
+                    row_data,
+                    row_num,
+                    sheet,
+                )
+
+        return resource_iri
 
     def _add_row_resource(
         self,
@@ -347,12 +435,18 @@ class RDFGraphBuilder:
             self.report.failed_rows += 1
             return None
 
-        # Add rdf:type
-        class_uri = self._resolve_class(sheet.row_resource.class_type)
-        self._add_triple(resource_iri, RDF.type, class_uri)
-
-        # Add owl:NamedIndividual declaration for OWL2 compliance
-        self._add_triple(resource_iri, RDF.type, OWL.NamedIndividual)
+        # Add rdf:type for all declared classes
+        # RML spec allows multiple rr:class statements
+        class_type = sheet.row_resource.class_type
+        if isinstance(class_type, list):
+            # Multiple classes declared
+            for cls in class_type:
+                class_uri = self._resolve_class(cls)
+                self._add_triple(resource_iri, RDF.type, class_uri)
+        else:
+            # Single class declared
+            class_uri = self._resolve_class(class_type)
+            self._add_triple(resource_iri, RDF.type, class_uri)
 
         # Add column properties
         for column_name, column_mapping in sheet.columns.items():
@@ -431,10 +525,9 @@ class RDFGraphBuilder:
             if not object_iri:
                 continue
 
-            # Add object class
+            # Add object class(es) as declared in mapping
             class_uri = self._resolve_class(obj_mapping.class_type)
             self._add_triple(object_iri, RDF.type, class_uri)
-            self._add_triple(object_iri, RDF.type, OWL.NamedIndividual)
 
             # Add object properties
             for prop_mapping in obj_mapping.properties:
@@ -476,6 +569,89 @@ class RDFGraphBuilder:
                 self._add_triple(main_resource, link_uri, object_iri)
             # Reason over object
             self._apply_reasoning(object_iri)
+
+    def _add_single_linked_object(
+        self,
+        main_resource: URIRef,
+        obj_name: str,
+        obj_mapping: Any,  # LinkedObject type
+        row_data: Dict[str, Any],
+        row_num: int,
+        sheet: SheetMapping,
+    ) -> Optional[URIRef]:
+        """Add a single linked object to the graph.
+
+        Helper method extracted for reuse in merged sheet processing.
+
+        Args:
+            main_resource: Main resource URI
+            obj_name: Object name/key
+            obj_mapping: LinkedObject mapping configuration
+            row_data: Row data dictionary
+            row_num: Row number for error reporting
+            sheet: Sheet mapping for error context
+
+        Returns:
+            URIRef of created object or None if creation failed
+        """
+        # Generate object IRI
+        object_iri = self._generate_iri(
+            obj_mapping.iri_template,
+            row_data,
+            row_num,
+            f"linked object (class: {obj_mapping.class_type})",
+        )
+
+        if not object_iri:
+            return None
+
+        # Add object class as declared in mapping
+        class_uri = self._resolve_class(obj_mapping.class_type)
+        self._add_triple(object_iri, RDF.type, class_uri)
+
+        # Add object properties
+        for prop_mapping in obj_mapping.properties:
+            column_name = prop_mapping.column
+            if column_name in row_data:
+                value = row_data[column_name]
+
+                if value is None or value == "":
+                    continue
+
+                # Apply transform if needed
+                if prop_mapping.transform:
+                    try:
+                        value = apply_transform(value, prop_mapping.transform, row_data)
+                    except Exception as e:
+                        self.report.add_error(
+                            f"Transform '{prop_mapping.transform}' failed for linked object column '{column_name}': {e}",
+                            row=row_num,
+                            severity=ErrorSeverity.WARNING,
+                        )
+                        continue
+
+                # Create literal
+                literal = self._create_literal(
+                    value,
+                    datatype=prop_mapping.datatype,
+                    language=prop_mapping.language or self.config.defaults.language,
+                    row_num=row_num,
+                    column_name=column_name,
+                )
+
+                if literal is not None:
+                    property_uri = self._resolve_property(prop_mapping.as_property)
+                    self._add_triple(object_iri, property_uri, literal)
+
+        # Link main resource to object
+        if obj_mapping.predicate:
+            link_uri = self._resolve_property(obj_mapping.predicate)
+            self._add_triple(main_resource, link_uri, object_iri)
+
+        # Reason over object
+        self._apply_reasoning(object_iri)
+
+        return object_iri
 
     def get_graph(self) -> Optional[Graph]:
         """Get the RDF graph.

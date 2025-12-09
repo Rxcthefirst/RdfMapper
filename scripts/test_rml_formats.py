@@ -36,7 +36,7 @@ def create_test_data():
     df = pl.DataFrame(data)
 
     # Create test_formats directory
-    test_dir = Path('test_formats')
+    test_dir = Path('../test_formats')
     test_dir.mkdir(exist_ok=True)
 
     print("Creating test data files...")
@@ -259,7 +259,7 @@ def run_conversion_tests():
     print("RUNNING CONVERSION TESTS")
     print("="*60)
 
-    test_dir = Path('test_formats')
+    test_dir = Path('../test_formats')
     formats = ['csv', 'tsv', 'json', 'xml']
 
     results = {}

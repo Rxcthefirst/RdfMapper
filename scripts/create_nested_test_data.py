@@ -265,7 +265,7 @@ def create_nested_json():
         }
     ]
 
-    output_dir = Path('test_formats')
+    output_dir = Path('../test_formats')
     output_dir.mkdir(exist_ok=True)
 
     output_file = output_dir / 'mortgage_applications_nested.json'
@@ -514,7 +514,7 @@ def create_nested_xml():
   </portfolio>
 </loanPortfolio>'''
 
-    output_dir = Path('test_formats')
+    output_dir = Path('../test_formats')
     output_dir.mkdir(exist_ok=True)
 
     output_file = output_dir / 'loan_portfolio_nested.xml'
