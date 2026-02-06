@@ -97,11 +97,11 @@ def reasoner(person_graph, analyzer):
 
 
 def test_basic_label_and_comment_usage(reasoner, analyzer):
+    # v0.3.0: use_embeddings parameter removed (always uses embeddings now)
     matcher = SemanticSimilarityMatcher(
         reasoner=reasoner,
         enabled=True,
-        threshold=0.5,
-        use_embeddings=False
+        threshold=0.5
     )
 
     col = make_column("mname", ["A", "B", "C"])  # should map to middle name
@@ -119,11 +119,11 @@ def test_basic_label_and_comment_usage(reasoner, analyzer):
 
 
 def test_domain_aware_boost(reasoner, analyzer):
+    # v0.3.0: use_embeddings parameter removed
     matcher = SemanticSimilarityMatcher(
         reasoner=reasoner,
         enabled=True,
-        threshold=0.5,
-        use_embeddings=False
+        threshold=0.5
     )
 
     # With first/last already matched (same domain), birth date should be boosted
@@ -151,11 +151,11 @@ def test_domain_aware_boost(reasoner, analyzer):
 
 
 def test_threshold_respected(reasoner, analyzer):
+    # v0.3.0: use_embeddings parameter removed
     matcher = SemanticSimilarityMatcher(
         reasoner=reasoner,
         enabled=True,
-        threshold=0.9,
-        use_embeddings=False
+        threshold=0.9
     )
 
     # Ambiguous column

@@ -61,57 +61,78 @@ class RMLParser:
         return self._convert_to_internal()
 
     def _convert_to_internal(self) -> Dict[str, Any]:
-        """Convert RML graph to internal mapping format.
+        """Convert RML graph to v3 universal mapping format.
 
-        Optimization: Groups TriplesMaps by source file to avoid redundant processing.
-        Multiple TriplesMaps with the same source are merged into a single sheet.
+        Returns configuration with:
+        - namespaces
+        - base_iri
+        - sources (data source definitions)
+        - mappings (entity mapping definitions)
         """
-        internal = {}
-
         # Extract namespaces
-        internal['namespaces'] = self._extract_namespaces()
+        namespaces = self._extract_namespaces()
 
         # Extract base IRI
-        internal['defaults'] = {
-            'base_iri': self._extract_base_iri()
-        }
+        base_iri = self._extract_base_iri()
 
-        # Extract triples maps and GROUP BY SOURCE FILE for optimization
+        # Extract triples maps
         triples_maps = list(self.graph.subjects(RDF.type, RR.TriplesMap))
 
-        # First pass: Group TriplesMaps by source file
-        source_groups = {}  # source_key -> list of TriplesMaps
+        # Build sources and mappings dictionaries
+        sources = {}
+        mappings = {}
 
         for tm in triples_maps:
-            sheet = self._convert_triples_map(tm)
-            if sheet:
-                # Create a unique key for this source
-                source_key = (sheet['source'], sheet.get('iterator', ''), sheet.get('format', 'csv'))
+            entity_data = self._convert_triples_map(tm)
+            if not entity_data:
+                continue
 
-                if source_key not in source_groups:
-                    source_groups[source_key] = []
+            # Extract source information
+            source_path = entity_data['source']
+            source_format = entity_data.get('format', 'csv')
+            source_iterator = entity_data.get('iterator')
 
-                source_groups[source_key].append(sheet)
+            # Create unique source name
+            source_name = entity_data['name'] + '_data'
 
-        # Second pass: Merge TriplesMaps with same source into single sheet
-        sheets = []
-        for source_key, sheet_group in source_groups.items():
-            if len(sheet_group) == 1:
-                # Only one TriplesMap for this source - use as is
-                sheets.append(sheet_group[0])
-            else:
-                # Multiple TriplesMaps for same source - merge them
-                merged = self._merge_sheets(sheet_group, source_key)
-                sheets.append(merged)
+            # Add to sources if not already present
+            if source_name not in sources:
+                source_def = {
+                    'path': source_path,
+                    'format': source_format
+                }
+                if source_iterator:
+                    source_def['iterator'] = source_iterator
+                sources[source_name] = source_def
 
-        internal['sheets'] = sheets
+            # Create mapping from entity data
+            mapping_name = entity_data['name']
+            mapping = {
+                'sources': source_name,
+                'subject': entity_data['subject'],
+                'properties': entity_data.get('properties', {}),
+            }
+
+            # Add relationships if present
+            if entity_data.get('relationships'):
+                mapping['relationships'] = entity_data['relationships']
+
+            mappings[mapping_name] = mapping
+
+        # Build v3 configuration
+        config = {
+            'namespaces': namespaces,
+            'base_iri': base_iri,
+            'sources': sources,
+            'mappings': mappings
+        }
 
         # Extract x-alignment metadata if present
         alignment_data = self._extract_alignment_metadata()
         if alignment_data:
-            internal['_x_alignment'] = alignment_data
+            config['_x_alignment'] = alignment_data
 
-        return internal
+        return config
 
     def _merge_sheets(self, sheets: List[Dict[str, Any]], source_key: tuple) -> Dict[str, Any]:
         """Merge multiple TriplesMaps with the same source into a single sheet.
@@ -133,16 +154,16 @@ class RMLParser:
         entity_names = [s['name'] for s in sheets]
         merged['name'] = f"{source_key[0].split('/')[-1].split('.')[0]}_merged"
 
-        # Track all columns and objects from all TriplesMaps
-        all_columns = {}
+        # Track all properties and objects from all TriplesMaps
+        all_properties = {}
         all_objects = {}
 
-        # Collect all columns and objects
+        # Collect all properties and objects
         for sheet in sheets:
-            all_columns.update(sheet.get('columns', {}))
+            all_properties.update(sheet.get('properties', {}))
             all_objects.update(sheet.get('objects', {}))
 
-        merged['columns'] = all_columns
+        merged['properties'] = all_properties
         merged['objects'] = all_objects
 
         # For row_resource, we need to handle multiple entity types
@@ -152,7 +173,7 @@ class RMLParser:
             entity_info = {
                 'class': sheet['row_resource']['class'],
                 'iri_template': sheet['row_resource']['iri_template'],
-                'columns': list(sheet.get('columns', {}).keys()),
+                'properties': list(sheet.get('properties', {}).keys()),
                 'objects': list(sheet.get('objects', {}).keys())
             }
             merged['_entity_types'].append(entity_info)
@@ -211,7 +232,7 @@ class RMLParser:
         return 'http://example.org/'
 
     def _convert_triples_map(self, triples_map: URIRef) -> Optional[Dict[str, Any]]:
-        """Convert a single RML TriplesMap to internal sheet format."""
+        """Convert a single RML TriplesMap to v3 entity format."""
 
         # Extract logical source
         logical_source = self.graph.value(triples_map, RML.logicalSource)
@@ -237,32 +258,32 @@ class RMLParser:
         # Extract predicate-object maps
         po_maps = list(self.graph.objects(triples_map, RR.predicateObjectMap))
         extraction_result = self._extract_predicate_object_maps_with_separation(po_maps, source_info['columns'])
-        columns_dict = extraction_result['data_properties']
-        objects_dict = extraction_result['object_properties']
+        properties_dict = extraction_result['data_properties']
+        relationships_dict = extraction_result['object_properties']
 
-        # Build sheet configuration in internal format
-        sheet = {
+        # Build v3 entity format
+        entity = {
             'name': source_info['name'],
             'source': source_info['source'],
-            'row_resource': {
+            'subject': {
                 'class': subject_info['class'],
                 'iri_template': subject_info['template']
             },
-            'columns': columns_dict  # Dict format, not list!
+            'properties': properties_dict  # Dict format: column_name -> {predicate: ..., datatype: ...}
         }
 
-        # Add objects if any were found
-        if objects_dict:
-            sheet['objects'] = objects_dict
+        # Add relationships if any were found
+        if relationships_dict:
+            entity['relationships'] = relationships_dict
 
         # Add optional fields
         if 'format' in source_info:
-            sheet['format'] = source_info['format']
+            entity['format'] = source_info['format']
 
         if 'iterator' in source_info:
-            sheet['iterator'] = source_info['iterator']
+            entity['iterator'] = source_info['iterator']
 
-        return sheet
+        return entity
 
     def _extract_source_info(self, logical_source: URIRef) -> Optional[Dict[str, Any]]:
         """Extract source file and format information."""
@@ -423,7 +444,7 @@ class RMLParser:
                     # Constant value - use property name as key
                     column_name = f"constant_{len(data_properties)}"
                     data_properties[column_name] = {
-                        'as': predicate_uri,
+                        'predicate': predicate_uri,
                         'datatype': self._infer_datatype(obj),
                         'default': str(obj),
                     }
@@ -457,7 +478,7 @@ class RMLParser:
                                 if target_ref:
                                     target_datatype = self.graph.value(target_obj_map, RR.datatype)
                                     prop_mapping = {
-                                        'as': self._compact_uri(str(target_pred)),  # Changed from 'property' to 'as'
+                                        'predicate': self._compact_uri(str(target_pred)),
                                         'column': str(target_ref)
                                     }
                                     if target_datatype:
@@ -553,8 +574,8 @@ class RMLParser:
         return mapping
 
     def _extract_object_map_for_dict(self, object_map: URIRef, predicate_uri: str) -> Optional[Dict[str, Any]]:
-        """Extract column mapping from object map for dict format (uses 'as' property)."""
-        mapping = {'as': predicate_uri}
+        """Extract column mapping from object map for dict format (v3: uses 'predicate' property)."""
+        mapping = {'predicate': predicate_uri}
 
         # Get reference (column name)
         reference = self.graph.value(object_map, RML.reference)

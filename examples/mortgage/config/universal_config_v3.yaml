@@ -1,9 +1,9 @@
 # ════════════════════════════════════════════════════════════════════════════════
-# RDFMap Configuration - v3 Universal Format
+# RDFMap Configuration - Universal Data Mapping Format
 # ════════════════════════════════════════════════════════════════════════════════
 #
-# Aligned with RML/YARRRML standards with RDFMap enhancements
-# Supports: CSV, JSON, XML, Excel, SQL databases, APIs, and any RML-compatible source
+# Supports: CSV, TSV, Excel, JSON, XML, SQL databases, and any RML-compatible source
+# Based on RML/YARRRML standards with RDFMap enhancements
 #
 # ════════════════════════════════════════════════════════════════════════════════
 
@@ -17,25 +17,42 @@ namespaces:
 # Base IRI for generated resources
 base_iri: http://example.org/
 
-# Data sources - universal term for all data types
+# Data sources - can be files, databases, APIs
+# Format: source_name -> [path/connection_string, iterator (optional)]
 sources:
   loans_data:
-    path: ../data/loans.csv
-    format: csv
+    - ../data/loans.csv
+    - csv  # Format: csv, json, xml, xlsx, etc.
+
+  # Example: JSON with iterator
+  # loans_json:
+  #   - ../data/loans.json
+  #   - json
+  #   - $.loans[*]  # JSONPath iterator for nested data
+
+  # Example: XML with XPath
+  # loans_xml:
+  #   - ../data/loans.xml
+  #   - xml
+  #   - //loan  # XPath iterator
 
 # Mappings - how to transform each source to RDF
+# Each mapping defines:
+# 1. Which source(s) to use
+# 2. Subject (IRI template + rdf:type)
+# 3. Predicates & Objects (properties)
 mappings:
 
   # Mapping for MortgageLoan entities
   MortgageLoan:
-    sources: loans_data
+    sources: loans_data  # Reference to source above
 
-    # Subject configuration (RML standard terminology)
+    # Subject configuration
     subject:
       iri_template: "{base_iri}mortgage_loan/{LoanID}"
-      class: ex:MortgageLoan
+      class: ex:MortgageLoan  # Can be list for multiple types
 
-    # Data properties (literals) - keyed by source column name
+    # Data properties (literals)
     properties:
       LoanID:
         predicate: ex:loanNumber
@@ -45,7 +62,7 @@ mappings:
       Principal:
         predicate: ex:principalAmount
         datatype: xsd:integer
-        transform: to_integer
+        transform: to_integer  # RDFMap enhancement: data transformation
         required: true
 
       InterestRate:
@@ -71,7 +88,7 @@ mappings:
         datatype: xsd:string
         required: true
 
-    # Relationships - object properties linking to other entities
+    # Object properties (relationships to other entities)
     relationships:
       hasBorrower:
         predicate: ex:hasBorrower
@@ -95,27 +112,26 @@ mappings:
               datatype: xsd:string
               required: true
 
-# Validation configuration (RDFMap enhancement)
+# ════════════════════════════════════════════════════════════════════════════════
+# RDFMap-Specific Configuration (optional enhancements)
+# ════════════════════════════════════════════════════════════════════════════════
+
+# Validation configuration
 validation:
   shacl:
     enabled: true
     shapes_file: ../shapes/mortgage_shapes.ttl
     inference: none
 
-# Processing options (RDFMap enhancement)
+# Processing options
 options:
-  on_error: report
+  on_error: report  # report, skip, fail
   skip_empty_values: true
-  chunk_size: 1000
+  chunk_size: 1000  # For large datasets
   aggregate_duplicates: true
-  output_format: ttl
+  output_format: ttl  # ttl, nt, xml, jsonld
 
-# Ontology imports for AI-powered mapping generation (RDFMap enhancement)
-imports:
-  - ../ontology/mortgage_ontology.ttl
-
-
-# Ontology imports
+# Ontology imports for AI-powered mapping generation
 imports:
   - ../ontology/mortgage_ontology.ttl
 

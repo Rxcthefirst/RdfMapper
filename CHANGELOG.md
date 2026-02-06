@@ -5,6 +5,112 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-12-14
+
+### 🚀 MAJOR UPDATE: v3 Universal Configuration Format!
+
+This release introduces the v3 configuration format - a complete redesign aligned with RML/YARRRML standards, providing universal data source support and cleaner semantics.
+
+**Breaking Changes**: v3 format is NOT backward compatible with v2  
+**Rationale**: Clean break for better architecture (no users affected)  
+**Migration**: See README.md for v2→v3 migration guide
+
+### ✨ New Features
+
+#### **🌍 Universal Data Source Support**
+- **`sources` + `mappings`** structure (replaces `sheets`)
+- Clear separation between data sources and transformations
+- Ready for CSV, JSON (with JSONPath), XML (with XPath), SQL databases, APIs
+- RML/YARRRML-compliant terminology throughout
+
+#### **📋 RML Standard Alignment**
+- **`subject`** instead of `row_resource` (RML standard term)
+- **`predicate`** instead of `as` (RML terminology)
+- **`relationships`** instead of `objects` (clearer semantics)
+- Full compatibility with RML/R2RML/YARRRML ecosystem
+
+#### **🎯 Enhanced Type Safety**
+- Complete Pydantic v3 models with strict validation
+- `DataSource`, `SubjectDefinition`, `PropertyMapping`, `RelationshipMapping`
+- Self-documenting configuration with clear field descriptions
+- Better error messages with specific validation feedback
+
+### 🔄 Changed
+
+#### Configuration Structure
+**Before (v2)**:
+```yaml
+defaults:
+  base_iri: http://example.org/
+sheets:
+  - name: loans
+    row_resource: {class: ex:Loan}
+    columns: {Name: {as: ex:name}}
+    objects: {borrower: {...}}
+```
+
+**After (v3)**:
+```yaml
+base_iri: http://example.org/
+sources:
+  loans_data: {path: loans.csv, format: csv}
+mappings:
+  Loan:
+    sources: loans_data
+    subject: {class: ex:Loan, iri_template: "..."}
+    properties: {Name: {predicate: ex:name}}
+    relationships: {borrower: {...}}
+```
+
+### 🗑️ Removed
+
+- **v1 format support** - Removed all v1 migration code
+- **v2 format support** - Clean break, no backward compatibility
+- **Legacy terminology** - `sheets`, `row_resource`, `columns`, `objects` removed
+- **Format migration logic** - Simplified loader, single format only
+
+### 🛠️ Technical Improvements
+
+- **Graph Builder**: Complete refactor for v3 structure
+- **RML Parser**: Outputs v3 format directly
+- **Config Loader**: Simplified, v3-only validation
+- **Type Hints**: Enhanced throughout for better IDE support
+- **Code Cleanup**: ~300 lines of legacy code removed
+
+### 📚 Documentation
+
+- **README.md**: Complete rewrite with v3 examples
+- **Migration Guide**: v2→v3 conversion instructions
+- **Configuration Guide**: Comprehensive v3 reference
+- **Examples**: Updated mortgage example with v3 format
+
+### ⚡ Performance
+
+- Simpler code paths (no format migration overhead)
+- Cleaner validation (single Pydantic model path)
+- Optimized graph builder (removed merged sheet complexity)
+
+### 🎯 Future Ready
+
+- **JSON Support**: Ready for JSONPath iterators
+- **XML Support**: Ready for XPath selectors
+- **Database Support**: Ready for SQL query sources
+- **API Support**: Ready for REST/GraphQL endpoints
+
+### 📦 Files Changed
+
+- **Created**: 7 new files (models, docs, examples)
+- **Updated**: 5 core files (parser, loader, builder, tests)
+- **Removed**: 2 deprecated modules (migration, format_adapter)
+
+### 🔗 Links
+
+- Full v3 documentation: See README.md
+- Design rationale: CONFIGURATION_FINAL_DECISION.md
+- Migration status: V3_MIGRATION_FINAL_REPORT.md
+
+---
+
 ## [0.3.0] - 2025-11-18
 
 ### 🎉 YARRRML Standards Compliance & Performance Optimization!

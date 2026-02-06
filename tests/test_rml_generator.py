@@ -139,16 +139,23 @@ def test_rml_roundtrip():
         temp_path = Path(f.name)
 
     try:
-        # Parse back
+        # Parse back (v3 format now)
         parsed_config = parse_rml(temp_path)
 
-        # Verify key elements are preserved
-        assert len(parsed_config['sheets']) == 1
-        sheet = parsed_config['sheets'][0]
+        # Verify key elements are preserved (v3 structure)
+        assert 'mappings' in parsed_config
+        assert len(parsed_config['mappings']) == 1
 
-        assert sheet['name'] == 'people'
-        assert 'people.csv' in sheet['source']
-        assert 'Person' in sheet['class']
+        mapping_name = list(parsed_config['mappings'].keys())[0]
+        mapping = parsed_config['mappings'][mapping_name]
+
+        # Check source
+        source_name = mapping['sources']
+        source = parsed_config['sources'][source_name]
+        assert 'people.csv' in source['path']
+
+        # Check subject
+        assert 'Person' in mapping['subject']['class']
         assert len(sheet['columns']) == 2
 
         # Find columns

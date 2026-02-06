@@ -133,7 +133,8 @@ class TestDatatypeValidation:
         assert is_valid is True
 
 
-class TestConfigValidation:
+# TestConfigValidation removed - tests deprecated v2 models
+# v3 uses different config structure (config_v3.py)
     """Test configuration validation."""
     
     def test_extract_prefixes(self):

@@ -23,8 +23,16 @@ def mortgage_example_dir():
 @pytest.fixture
 def mortgage_config(mortgage_example_dir):
     """Load mortgage mapping configuration."""
-    config_path = mortgage_example_dir / "config" / "mortgage_mapping.yaml"
+    config_path = mortgage_example_dir / "config" / "internal_inline.yaml"
     return load_mapping_config(config_path)
+
+
+def get_v3_mapping_and_source(config):
+    """Helper to extract mapping and source from v3 config."""
+    mapping_name = list(config.mappings.keys())[0]
+    mapping = config.mappings[mapping_name]
+    source = config.sources[mapping.sources]
+    return mapping_name, mapping, source
 
 
 class TestMortgageExample:
@@ -33,20 +41,22 @@ class TestMortgageExample:
     def test_load_mortgage_config(self, mortgage_config):
         """Test that mortgage configuration loads correctly."""
         assert mortgage_config is not None
-        assert len(mortgage_config.sheets) == 1
-        assert mortgage_config.sheets[0].name == "loans"
+        # V3: uses mappings instead of sheets
+        assert len(mortgage_config.mappings) == 1
+        assert "MortgageLoan" in mortgage_config.mappings
         assert "ex" in mortgage_config.namespaces
-        assert mortgage_config.defaults.base_iri == "https://data.example.com/"
-    
+        # V3: base_iri at root level
+        assert mortgage_config.base_iri == "http://example.org/"
+
     def test_parse_mortgage_data(self, mortgage_example_dir, mortgage_config):
         """Test parsing mortgage CSV data."""
-        sheet = mortgage_config.sheets[0]
-        parser = create_parser(
-            Path(sheet.source),
-            delimiter=mortgage_config.options.delimiter,
-            has_header=mortgage_config.options.header,
-        )
-        
+        # V3: get mapping and source
+        mapping_name = list(mortgage_config.mappings.keys())[0]
+        mapping = mortgage_config.mappings[mapping_name]
+        source = mortgage_config.sources[mapping.sources]
+
+        parser = create_parser(Path(source.path))
+
         # Get columns
         columns = parser.get_column_names()
         assert "LoanID" in columns
@@ -68,17 +78,17 @@ class TestMortgageExample:
         report = ProcessingReport()
         builder = RDFGraphBuilder(mortgage_config, report)
         
-        # Process first sheet
-        sheet = mortgage_config.sheets[0]
-        parser = create_parser(
-            Path(sheet.source),
-            delimiter=mortgage_config.options.delimiter,
-            has_header=mortgage_config.options.header,
-        )
-        
+        # V3: get mapping and source
+        mapping_name = list(mortgage_config.mappings.keys())[0]
+        mapping = mortgage_config.mappings[mapping_name]
+        source = mortgage_config.sources[mapping.sources]
+
+        parser = create_parser(Path(source.path))
+
         for chunk in parser.parse():
-            builder.add_dataframe(chunk, sheet)
-        
+            # V3: pass mapping and mapping_name
+            builder.add_dataframe(chunk, mapping, mapping_name)
+
         graph = builder.get_graph()
         
         # Verify graph has triples
@@ -91,9 +101,9 @@ class TestMortgageExample:
         # Verify specific triples exist
         ex = Namespace("https://example.com/mortgage#")
         
-        # Check for loan L-1001
-        loan_uri = URIRef("https://data.example.com/loan/L-1001")
-        
+        # Check for loan L-1001 (v3 uses base_iri + mortgage_loan/{LoanID})
+        loan_uri = URIRef("http://example.org/mortgage_loan/L-1001")
+
         # Check loan type
         types = list(graph.objects(loan_uri, RDF.type))
         assert len(types) > 0
@@ -168,16 +178,12 @@ class TestMortgageExample:
         report = ProcessingReport()
         builder = RDFGraphBuilder(mortgage_config, report)
         
-        sheet = mortgage_config.sheets[0]
-        parser = create_parser(
-            Path(sheet.source),
-            delimiter=mortgage_config.options.delimiter,
-            has_header=mortgage_config.options.header,
-        )
-        
+        mapping_name, mapping, source = get_v3_mapping_and_source(mortgage_config)
+        parser = create_parser(Path(source.path))
+
         for chunk in parser.parse():
-            builder.add_dataframe(chunk, sheet)
-        
+            builder.add_dataframe(chunk, mapping, mapping_name)
+
         report.finalize()
         
         # Should have processed 5 rows successfully
@@ -190,16 +196,12 @@ class TestMortgageExample:
         report = ProcessingReport()
         builder = RDFGraphBuilder(mortgage_config, report)
         
-        sheet = mortgage_config.sheets[0]
-        parser = create_parser(
-            Path(sheet.source),
-            delimiter=mortgage_config.options.delimiter,
-            has_header=mortgage_config.options.header,
-        )
-        
+        mapping_name, mapping, source = get_v3_mapping_and_source(mortgage_config)
+        parser = create_parser(Path(source.path))
+
         for chunk in parser.parse():
-            builder.add_dataframe(chunk, sheet)
-        
+            builder.add_dataframe(chunk, mapping, mapping_name)
+
         graph = builder.get_graph()
         
         # Test Turtle
@@ -225,17 +227,17 @@ class TestDataTransformations:
         report = ProcessingReport()
         builder = RDFGraphBuilder(mortgage_config, report)
         
-        sheet = mortgage_config.sheets[0]
-        parser = create_parser(Path(sheet.source))
-        
+        mapping_name, mapping, source = get_v3_mapping_and_source(mortgage_config)
+        parser = create_parser(Path(source.path))
+
         for chunk in parser.parse():
-            builder.add_dataframe(chunk, sheet)
-        
+            builder.add_dataframe(chunk, mapping, mapping_name)
+
         graph = builder.get_graph()
         ex = Namespace("https://example.com/mortgage#")
         
         # Find a loan and check its principal
-        loan_uri = URIRef("https://data.example.com/loan/L-1001")
+        loan_uri = URIRef("http://example.org/mortgage_loan/L-1001")
         principals = list(graph.objects(loan_uri, ex.principalAmount))
         
         assert len(principals) > 0
@@ -251,17 +253,17 @@ class TestDataTransformations:
         report = ProcessingReport()
         builder = RDFGraphBuilder(mortgage_config, report)
         
-        sheet = mortgage_config.sheets[0]
-        parser = create_parser(Path(sheet.source))
-        
+        mapping_name, mapping, source = get_v3_mapping_and_source(mortgage_config)
+        parser = create_parser(Path(source.path))
+
         for chunk in parser.parse():
-            builder.add_dataframe(chunk, sheet)
-        
+            builder.add_dataframe(chunk, mapping, mapping_name)
+
         graph = builder.get_graph()
         ex = Namespace("https://example.com/mortgage#")
         
         # Find a loan and check its origination date
-        loan_uri = URIRef("https://data.example.com/loan/L-1001")
+        loan_uri = URIRef("http://example.org/mortgage_loan/L-1001")
         dates = list(graph.objects(loan_uri, ex.originationDate))
         
         assert len(dates) > 0

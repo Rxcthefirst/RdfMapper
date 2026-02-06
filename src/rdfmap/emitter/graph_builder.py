@@ -10,7 +10,7 @@ from rdflib.namespace import OWL
 from ..generator.ontology_analyzer import OntologyAnalyzer  # removed OntologyProperty
 from ..iri.generator import IRITemplate, curie_to_iri
 from ..models.errors import ErrorSeverity, ProcessingReport
-from ..models.mapping import MappingConfig, SheetMapping
+from ..models.config_v3 import MappingConfig, EntityMapping
 from ..transforms.functions import apply_transform
 from ..validator.datatypes import validate_datatype
 
@@ -49,8 +49,9 @@ class RDFGraphBuilder:
             for prop in ontology_analyzer.properties.values():
                 self._prop_index[str(prop.uri)] = prop
 
-        self.enable_reasoning = getattr(config.defaults, 'enable_reasoning', True)
-        self.transitive_depth = getattr(config.defaults, 'transitive_depth', 2)
+        # V3 config: check if options exist, otherwise use defaults
+        self.enable_reasoning = getattr(config.options, 'enable_reasoning', True) if config.options else True
+        self.transitive_depth = getattr(config.options, 'transitive_depth', 2) if config.options else 2
 
     def _structural_check(self, subject: URIRef, predicate: URIRef, obj) -> None:
         if not self.ontology_analyzer:
@@ -229,13 +230,14 @@ class RDFGraphBuilder:
             return None
 
     def _apply_column_transforms(
-        self, df: pl.DataFrame, sheet: SheetMapping
+        self, df: pl.DataFrame, mapping: EntityMapping, mapping_name: str
     ) -> pl.DataFrame:
         """Apply transforms to DataFrame columns using Polars expressions.
 
         Args:
             df: Input DataFrame
-            sheet: Sheet mapping configuration
+            mapping: Entity mapping configuration (v3 format)
+            mapping_name: Name of the mapping (for error reporting)
 
         Returns:
             DataFrame with transforms applied
@@ -244,24 +246,24 @@ class RDFGraphBuilder:
         exprs = []
 
         for column_name in df.columns:
-            if column_name in sheet.columns:
-                column_mapping = sheet.columns[column_name]
-                if column_mapping.transform:
+            if column_name in mapping.properties:
+                prop_mapping = mapping.properties[column_name]
+                if prop_mapping.transform:
                     # Apply transform using Polars expression
                     try:
-                        if column_mapping.transform == "to_decimal":
+                        if prop_mapping.transform == "to_decimal":
                             expr = pl.col(column_name).cast(pl.Float64)
-                        elif column_mapping.transform == "to_integer":
+                        elif prop_mapping.transform == "to_integer":
                             expr = pl.col(column_name).cast(pl.Int64)
-                        elif column_mapping.transform == "to_date":
+                        elif prop_mapping.transform == "to_date":
                             expr = pl.col(column_name).str.strptime(pl.Date, "%Y-%m-%d", strict=False)
-                        elif column_mapping.transform == "to_datetime":
+                        elif prop_mapping.transform == "to_datetime":
                             expr = pl.col(column_name).str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S", strict=False)
-                        elif column_mapping.transform == "lowercase":
+                        elif prop_mapping.transform == "lowercase":
                             expr = pl.col(column_name).str.to_lowercase()
-                        elif column_mapping.transform == "uppercase":
+                        elif prop_mapping.transform == "uppercase":
                             expr = pl.col(column_name).str.to_uppercase()
-                        elif column_mapping.transform == "trim":
+                        elif prop_mapping.transform == "trim":
                             expr = pl.col(column_name).str.strip_chars()
                         else:
                             # Keep original column for custom transforms
@@ -272,7 +274,7 @@ class RDFGraphBuilder:
                         # Keep original column on transform error
                         exprs.append(pl.col(column_name))
                         self.report.add_error(
-                            f"Transform '{column_mapping.transform}' failed for column '{column_name}': {e}",
+                            f"Transform '{prop_mapping.transform}' failed for column '{column_name}' in mapping '{mapping_name}': {e}",
                             severity=ErrorSeverity.WARNING,
                         )
                 else:
@@ -285,138 +287,55 @@ class RDFGraphBuilder:
     def add_dataframe(
         self,
         df: pl.DataFrame,
-        sheet: SheetMapping,
+        mapping: EntityMapping,
+        mapping_name: str,
         offset: int = 0,
     ) -> None:
         """Add Polars DataFrame to RDF graph with vectorized processing.
 
-        Optimization: Handles merged sheets with multiple entity types to avoid
-        redundant source file processing.
-
         Args:
             df: Polars DataFrame to process
-            sheet: Sheet mapping configuration
+            mapping: Entity mapping configuration (v3 format)
+            mapping_name: Name of the mapping (for error reporting)
             offset: Row offset for error reporting
         """
         if len(df) == 0:
             return
 
         # Apply transforms using Polars expressions
-        df = self._apply_column_transforms(df, sheet)
+        df = self._apply_column_transforms(df, mapping, mapping_name)
 
         # Convert to Python dictionaries for RDF processing
         # This is currently necessary for IRI template rendering
         # Future optimization: implement template rendering directly in Polars
         rows_data = df.to_dicts()
 
-        # Check if this is a merged sheet with multiple entity types
-        entity_types = getattr(sheet, '_entity_types', None)
+        # V3: Process rows for this entity mapping
+        for idx, row_data in enumerate(rows_data):
+            row_num = offset + idx + 1  # 1-indexed for users
 
-        if entity_types:
-            # Merged sheet - create multiple entities per row
-            for idx, row_data in enumerate(rows_data):
-                row_num = offset + idx + 1
+            # Add main resource
+            main_resource = self._add_row_resource(mapping, mapping_name, row_data, row_num)
 
-                # Create each entity type for this row
-                for entity_info in entity_types:
-                    self._add_entity_from_merged_sheet(
-                        entity_info,
-                        row_data,
-                        row_num,
-                        sheet
-                    )
+            if main_resource:
+                # Add linked relationships (v3: relationships instead of objects)
+                self._add_relationships(main_resource, mapping, mapping_name, row_data, row_num)
 
                 self.report.total_rows += 1
-        else:
-            # Standard single-entity sheet processing
-            for idx, row_data in enumerate(rows_data):
-                row_num = offset + idx + 1  # 1-indexed for users
 
-                # Add main resource
-                main_resource = self._add_row_resource(sheet, row_data, row_num)
-
-                if main_resource:
-                    # Add linked objects
-                    self._add_linked_objects(main_resource, sheet, row_data, row_num)
-
-                    self.report.total_rows += 1
-
-    def _add_entity_from_merged_sheet(
-        self,
-        entity_info: Dict[str, Any],
-        row_data: Dict[str, Any],
-        row_num: int,
-        sheet: SheetMapping,
-    ) -> Optional[URIRef]:
-        """Create an entity from a merged sheet's entity type info.
-
-        Args:
-            entity_info: Entity type configuration with class, iri_template, columns, objects
-            row_data: Row data dictionary
-            row_num: Row number for error reporting
-            sheet: Original sheet for namespace resolution
-
-        Returns:
-            URIRef of created resource or None if creation failed
-        """
-        # Generate IRI for this entity
-        resource_iri = self._generate_iri(
-            entity_info['iri_template'],
-            row_data,
-            row_num,
-            f"entity {entity_info['class']}",
-        )
-
-        if not resource_iri:
-            return None
-
-        # Add rdf:type for declared class(es)
-        entity_class = entity_info['class']
-        if isinstance(entity_class, list):
-            for cls in entity_class:
-                class_uri = self._resolve_class(cls)
-                self.graph.add((resource_iri, RDF.type, class_uri))
-        else:
-            class_uri = self._resolve_class(entity_class)
-            self.graph.add((resource_iri, RDF.type, class_uri))
-
-        # Add data properties for this entity's columns
-        for col_name in entity_info.get('columns', []):
-            if col_name in sheet.columns:
-                col_mapping = sheet.columns[col_name]
-                self._add_column_value(
-                    resource_iri,
-                    col_mapping,
-                    row_data.get(col_name),
-                    row_num,
-                    f"{sheet.name}.{col_name}",
-                )
-
-        # Add object properties for this entity
-        for obj_name in entity_info.get('objects', []):
-            if obj_name in sheet.objects:
-                obj_config = sheet.objects[obj_name]
-                self._add_single_linked_object(
-                    resource_iri,
-                    obj_name,
-                    obj_config,
-                    row_data,
-                    row_num,
-                    sheet,
-                )
-
-        return resource_iri
 
     def _add_row_resource(
         self,
-        sheet: SheetMapping,
+        mapping: EntityMapping,
+        mapping_name: str,
         row_data: Dict[str, Any],
         row_num: int,
     ) -> Optional[URIRef]:
         """Add main row resource to graph.
 
         Args:
-            sheet: Sheet mapping configuration
+            mapping: Entity mapping configuration (v3 format)
+            mapping_name: Name of the mapping (for error reporting)
             row_data: Row data dictionary
             row_num: Row number for error reporting
 
@@ -425,10 +344,10 @@ class RDFGraphBuilder:
         """
         # Generate IRI for main resource
         resource_iri = self._generate_iri(
-            sheet.row_resource.iri_template,
+            mapping.subject.iri_template,
             row_data,
             row_num,
-            f"row resource (sheet: {sheet.name})",
+            f"row resource (mapping: {mapping_name})",
         )
 
         if not resource_iri:
@@ -437,7 +356,7 @@ class RDFGraphBuilder:
 
         # Add rdf:type for all declared classes
         # RML spec allows multiple rr:class statements
-        class_type = sheet.row_resource.class_type
+        class_type = mapping.subject.class_type
         if isinstance(class_type, list):
             # Multiple classes declared
             for cls in class_type:
@@ -448,15 +367,15 @@ class RDFGraphBuilder:
             class_uri = self._resolve_class(class_type)
             self._add_triple(resource_iri, RDF.type, class_uri)
 
-        # Add column properties
-        for column_name, column_mapping in sheet.columns.items():
+        # Add data properties (v3: properties dict with 'predicate' field)
+        for column_name, prop_mapping in mapping.properties.items():
             if column_name in row_data:
                 value = row_data[column_name]
 
                 # Skip empty required values
-                if column_mapping.required and (value is None or value == ""):
+                if prop_mapping.required and (value is None or value == ""):
                     self.report.add_error(
-                        f"Required column '{column_name}' is empty",
+                        f"Required property '{column_name}' is empty",
                         row=row_num,
                         severity=ErrorSeverity.ERROR,
                     )
@@ -467,15 +386,15 @@ class RDFGraphBuilder:
                     continue
 
                 # Apply custom transform if needed (fallback for complex transforms)
-                if column_mapping.transform and column_mapping.transform not in [
+                if prop_mapping.transform and prop_mapping.transform not in [
                     "to_decimal", "to_integer", "to_date", "to_datetime",
                     "lowercase", "uppercase", "trim"
                 ]:
                     try:
-                        value = apply_transform(value, column_mapping.transform, row_data)
+                        value = apply_transform(value, prop_mapping.transform, row_data)
                     except Exception as e:
                         self.report.add_error(
-                            f"Transform '{column_mapping.transform}' failed for column '{column_name}': {e}",
+                            f"Transform '{prop_mapping.transform}' failed for column '{column_name}': {e}",
                             row=row_num,
                             severity=ErrorSeverity.WARNING,
                         )
@@ -484,91 +403,138 @@ class RDFGraphBuilder:
                 # Create literal
                 literal = self._create_literal(
                     value,
-                    datatype=column_mapping.datatype,
-                    language=column_mapping.language or self.config.defaults.language,
+                    datatype=prop_mapping.datatype,
+                    language=prop_mapping.language,
                     row_num=row_num,
                     column_name=column_name,
                 )
 
                 if literal is not None:
-                    property_uri = self._resolve_property(column_mapping.as_property)
+                    # V3: use 'predicate' field instead of 'as_property'
+                    property_uri = self._resolve_property(prop_mapping.predicate)
                     self._add_triple(resource_iri, property_uri, literal)
+
         # Apply reasoning to main resource
         self._apply_reasoning(resource_iri)
 
         return resource_iri
 
-    def _add_linked_objects(
+    def _add_relationships(
         self,
         main_resource: URIRef,
-        sheet: SheetMapping,
+        mapping: EntityMapping,
+        mapping_name: str,
         row_data: Dict[str, Any],
         row_num: int,
     ) -> None:
-        """Add linked objects to graph.
+        """Add relationship objects to graph (v3: relationships instead of objects).
 
         Args:
             main_resource: Main resource URI
-            sheet: Sheet mapping configuration
+            mapping: Entity mapping configuration
+            mapping_name: Name of the mapping
             row_data: Row data dictionary
             row_num: Row number for error reporting
         """
-        for obj_name, obj_mapping in sheet.objects.items():
-            # Generate object IRI
-            object_iri = self._generate_iri(
-                obj_mapping.iri_template,
+        if not mapping.relationships:
+            return
+
+        # V3: iterate over relationships
+        for rel_name, rel_mapping in mapping.relationships.items():
+            self._add_single_relationship(
+                main_resource,
+                rel_name,
+                rel_mapping,
                 row_data,
                 row_num,
-                f"linked object (class: {obj_mapping.class_type})",
+                mapping_name,
             )
 
-            if not object_iri:
-                continue
+    def _add_single_relationship(
+        self,
+        main_resource: URIRef,
+        rel_name: str,
+        rel_mapping: Any,  # RelationshipMapping type
+        row_data: Dict[str, Any],
+        row_num: int,
+        mapping_name: str,
+    ) -> Optional[URIRef]:
+        """Add a single relationship (linked entity) to the graph (v3 format).
 
-            # Add object class(es) as declared in mapping
-            class_uri = self._resolve_class(obj_mapping.class_type)
-            self._add_triple(object_iri, RDF.type, class_uri)
+        Args:
+            main_resource: Main resource URI
+            rel_name: Relationship name/key
+            rel_mapping: RelationshipMapping configuration
+            row_data: Row data dictionary
+            row_num: Row number for error reporting
+            mapping_name: Mapping name for error context
 
-            # Add object properties
-            for prop_mapping in obj_mapping.properties:
-                column_name = prop_mapping.column
-                if column_name in row_data:
-                    value = row_data[column_name]
+        Returns:
+            URIRef of created related entity or None if creation failed
+        """
+        # Generate related entity IRI
+        related_entity_iri = self._generate_iri(
+            rel_mapping.object.iri_template,
+            row_data,
+            row_num,
+            f"related entity (class: {rel_mapping.object.class_type})",
+        )
 
-                    if value is None or value == "":
+        if not related_entity_iri:
+            return None
+
+        # Add entity class as declared in mapping
+        class_type = rel_mapping.object.class_type
+        if isinstance(class_type, list):
+            for cls in class_type:
+                class_uri = self._resolve_class(cls)
+                self._add_triple(related_entity_iri, RDF.type, class_uri)
+        else:
+            class_uri = self._resolve_class(class_type)
+            self._add_triple(related_entity_iri, RDF.type, class_uri)
+
+        # Add properties of the related entity (v3: properties is a dict)
+        for column_name, prop_mapping in rel_mapping.object.properties.items():
+            if column_name in row_data:
+                value = row_data[column_name]
+
+                if value is None or value == "":
+                    continue
+
+                # Apply transform if needed
+                if prop_mapping.transform:
+                    try:
+                        value = apply_transform(value, prop_mapping.transform, row_data)
+                    except Exception as e:
+                        self.report.add_error(
+                            f"Transform '{prop_mapping.transform}' failed for related entity column '{column_name}': {e}",
+                            row=row_num,
+                            severity=ErrorSeverity.WARNING,
+                        )
                         continue
 
-                    # Apply transform if needed
-                    if prop_mapping.transform:
-                        try:
-                            value = apply_transform(value, prop_mapping.transform, row_data)
-                        except Exception as e:
-                            self.report.add_error(
-                                f"Transform '{prop_mapping.transform}' failed for linked object column '{column_name}': {e}",
-                                row=row_num,
-                                severity=ErrorSeverity.WARNING,
-                            )
-                            continue
+                # Create literal
+                literal = self._create_literal(
+                    value,
+                    datatype=prop_mapping.datatype,
+                    language=prop_mapping.language,
+                    row_num=row_num,
+                    column_name=column_name,
+                )
 
-                    # Create literal
-                    literal = self._create_literal(
-                        value,
-                        datatype=prop_mapping.datatype,
-                        language=prop_mapping.language or self.config.defaults.language,
-                        row_num=row_num,
-                        column_name=column_name,
-                    )
+                if literal is not None:
+                    # V3: use 'predicate' field
+                    property_uri = self._resolve_property(prop_mapping.predicate)
+                    self._add_triple(related_entity_iri, property_uri, literal)
 
-                    if literal is not None:
-                        property_uri = self._resolve_property(prop_mapping.as_property)
-                        self._add_triple(object_iri, property_uri, literal)
+        # Link main resource to related entity
+        link_uri = self._resolve_property(rel_mapping.predicate)
+        self._add_triple(main_resource, link_uri, related_entity_iri)
 
-            # Link main resource to object
-            if obj_mapping.predicate:
-                link_uri = self._resolve_property(obj_mapping.predicate)
-                self._add_triple(main_resource, link_uri, object_iri)
-            # Reason over object
-            self._apply_reasoning(object_iri)
+        # Reason over related entity
+        self._apply_reasoning(related_entity_iri)
+
+        return related_entity_iri
 
     def _add_single_linked_object(
         self,
@@ -577,11 +543,11 @@ class RDFGraphBuilder:
         obj_mapping: Any,  # LinkedObject type
         row_data: Dict[str, Any],
         row_num: int,
-        sheet: SheetMapping,
+        sheet: EntityMapping,
     ) -> Optional[URIRef]:
-        """Add a single linked object to the graph.
+        """DEPRECATED: Use _add_single_relationship instead.
 
-        Helper method extracted for reuse in merged sheet processing.
+        Kept for backward compatibility during migration.
 
         Args:
             main_resource: Main resource URI

@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ErrorHandling(str, Enum):
@@ -44,7 +44,7 @@ class ColumnMapping(BaseModel):
     )
     delimiter: Optional[str] = Field(None, description="Delimiter for multi-valued columns")
 
-    class Config:
+    model_config = ConfigDict(populate_by_name=True)
         populate_by_name = True
 
 
@@ -58,7 +58,7 @@ class ObjectPropertyMapping(BaseModel):
     default: Optional[Any] = None
     required: bool = False
     language: Optional[str] = None
-
+    model_config = ConfigDict(populate_by_name=True)
     class Config:
         populate_by_name = True
 
@@ -73,9 +73,9 @@ class LinkedObject(BaseModel):
         description="RDF class(es) for the linked object. Can be single class or list of classes"
     )
     iri_template: str = Field(..., description="IRI template for generating object IRIs")
-    properties: List[ObjectPropertyMapping] = Field(
-        default_factory=list, description="Properties of the linked object"
-    )
+    properties: Dict[str, ColumnMapping] = Field(
+        default_factory=dict, description="Properties of the linked object (v2 format uses dict)"
+    model_config = ConfigDict(populate_by_name=True)
 
     class Config:
         populate_by_name = True
@@ -88,7 +88,7 @@ class RowResource(BaseModel):
         ...,
         alias="class",
         description="RDF class(es) for the resource. Can be single class or list of classes (e.g., for owl:NamedIndividual)"
-    )
+    model_config = ConfigDict(populate_by_name=True)
     iri_template: str = Field(..., description="IRI template using column placeholders")
 
     class Config:
@@ -101,8 +101,8 @@ class SheetMapping(BaseModel):
     name: str = Field(..., description="Logical name for this sheet")
     source: str = Field(..., description="Path to CSV/XLSX file (relative or absolute)")
     row_resource: RowResource = Field(..., description="Configuration for main row resource")
-    columns: Dict[str, ColumnMapping] = Field(
-        default_factory=dict, description="Column to property mappings"
+    properties: Dict[str, ColumnMapping] = Field(
+        default_factory=dict, description="Column to property mappings (v2 format)"
     )
     objects: Dict[str, LinkedObject] = Field(
         default_factory=dict, description="Linked object configurations"
@@ -226,7 +226,7 @@ class MappingConfig(BaseModel):
                     for prop in obj.properties:
                         available_cols.add(prop.column)
 
-                # Note: Full validation of template variables would require parsing
+    model_config = ConfigDict(use_enum_values=True)
                 # the actual data, so we do basic checks here
         return self
 

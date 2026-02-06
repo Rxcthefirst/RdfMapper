@@ -104,13 +104,17 @@ class TestColumnMatchingWithSKOS:
         
         mapping = generator.generate(target_class="Employee")
         
+        # V3: Access properties from first mapping
+        mapping_name = list(mapping["mappings"].keys())[0]
+        properties = mapping["mappings"][mapping_name]["properties"]
+
         # EMP_ID column should match employeeId property via hiddenLabel
-        assert "EMP_ID" in mapping["sheets"][0]["columns"]
-        emp_id_mapping = mapping["sheets"][0]["columns"]["EMP_ID"]
-        
+        assert "EMP_ID" in properties
+        emp_id_mapping = properties["EMP_ID"]
+
         # Should map to employeeId property
-        assert "employeeId" in emp_id_mapping["as"]
-    
+        assert "employeeId" in emp_id_mapping["predicate"]
+
     def test_matches_multiple_hidden_labels(self):
         """Test matching of various abbreviated column names."""
         config = GeneratorConfig(base_iri="http://example.org/data/")
@@ -121,36 +125,39 @@ class TestColumnMatchingWithSKOS:
         )
         
         mapping = generator.generate(target_class="Employee")
-        columns = mapping["sheets"][0]["columns"]
-        
+
+        # V3: Access properties from first mapping
+        mapping_name = list(mapping["mappings"].keys())[0]
+        properties = mapping["mappings"][mapping_name]["properties"]
+
         # fname -> firstName (via hiddenLabel)
-        assert "fname" in columns
-        assert "firstName" in columns["fname"]["as"]
-        
+        assert "fname" in properties
+        assert "firstName" in properties["fname"]["predicate"]
+
         # lname -> lastName (via hiddenLabel)
-        assert "lname" in columns
-        assert "lastName" in columns["lname"]["as"]
-        
+        assert "lname" in properties
+        assert "lastName" in properties["lname"]["predicate"]
+
         # email_addr -> emailAddress (via hiddenLabel)
-        assert "email_addr" in columns
-        assert "emailAddress" in columns["email_addr"]["as"]
-        
+        assert "email_addr" in properties
+        assert "emailAddress" in properties["email_addr"]["predicate"]
+
         # phone -> phoneNumber (via hiddenLabel)
-        assert "phone" in columns
-        assert "phoneNumber" in columns["phone"]["as"]
-        
+        assert "phone" in properties
+        assert "phoneNumber" in properties["phone"]["predicate"]
+
         # sal -> salary (via hiddenLabel)
-        assert "sal" in columns
-        assert "salary" in columns["sal"]["as"]
-        
+        assert "sal" in properties
+        assert "salary" in properties["sal"]["predicate"]
+
         # hire_dt -> hireDate (via hiddenLabel)
-        assert "hire_dt" in columns
-        assert "hireDate" in columns["hire_dt"]["as"]
-        
+        assert "hire_dt" in properties
+        assert "hireDate" in properties["hire_dt"]["predicate"]
+
         # active -> isActive (via hiddenLabel)
-        assert "active" in columns
-        assert "isActive" in columns["active"]["as"]
-    
+        assert "active" in properties
+        assert "isActive" in properties["active"]["predicate"]
+
     def test_priority_pref_label_over_hidden_label(self):
         """Test that prefLabel has priority over hiddenLabel if both match."""
         # This tests the matching priority order
@@ -205,44 +212,46 @@ class TestGeneratorWorkflowComplete:
             with open(mapping_file, 'w') as f:
                 yaml.dump(mapping, f, default_flow_style=False, sort_keys=False)
             
-            # Step 4: Verify generated config structure
+            # Step 4: Verify generated config structure (v3 format)
             assert "namespaces" in mapping
-            assert "defaults" in mapping
-            assert "sheets" in mapping
-            assert len(mapping["sheets"]) == 1
-            
-            sheet = mapping["sheets"][0]
-            assert sheet["name"] == "employees"
-            assert "row_resource" in sheet
-            assert "columns" in sheet
-            
-            # Verify column mappings were created
-            assert len(sheet["columns"]) > 0
-            
+            assert "base_iri" in mapping
+            assert "sources" in mapping
+            assert "mappings" in mapping
+            assert len(mapping["mappings"]) == 1
+
+            # Get first mapping
+            mapping_name = list(mapping["mappings"].keys())[0]
+            entity_mapping = mapping["mappings"][mapping_name]
+
+            assert "subject" in entity_mapping
+            assert "properties" in entity_mapping
+
+            # Verify property mappings were created
+            assert len(entity_mapping["properties"]) > 0
+
             # Verify key columns are mapped correctly
-            columns = sheet["columns"]
-            assert "EMP_ID" in columns
-            assert "fname" in columns
-            assert "lname" in columns
-            assert "sal" in columns
-            
+            properties = entity_mapping["properties"]
+            assert "EMP_ID" in properties
+            assert "fname" in properties
+            assert "lname" in properties
+            assert "sal" in properties
+
             # Step 5: Load config and build RDF
             loaded_config = load_mapping_config(mapping_file)
             report = ProcessingReport()
             builder = RDFGraphBuilder(loaded_config, report)
             
-            # Process the CSV data
+            # Process the CSV data (v3 format)
             from rdfmap.parsers.data_source import create_parser
-            sheet = loaded_config.sheets[0]
-            parser = create_parser(
-                Path(sheet.source),
-                delimiter=loaded_config.options.delimiter if loaded_config.options else ',',
-                has_header=loaded_config.options.header if loaded_config.options else True
-            )
-            
+            mapping_name_loaded = list(loaded_config.mappings.keys())[0]
+            mapping_obj = loaded_config.mappings[mapping_name_loaded]
+            source = loaded_config.sources[mapping_obj.sources]
+
+            parser = create_parser(Path(source.path))
+
             for chunk in parser.parse():
-                builder.add_dataframe(chunk, sheet)
-            
+                builder.add_dataframe(chunk, mapping_obj, mapping_name_loaded)
+
             # Get the built graph
             graph = builder.get_graph()
             
@@ -279,14 +288,15 @@ class TestGeneratorWorkflowComplete:
         
         mapping = generator.generate(target_class="Employee")
         
-        # Should detect linked objects (department, position, manager)
-        sheet = mapping["sheets"][0]
-        
-        # Check if objects were detected
+        # V3: Check for relationships in first mapping
+        mapping_name = list(mapping["mappings"].keys())[0]
+        entity_mapping = mapping["mappings"][mapping_name]
+
+        # Check if relationships were detected
         # (Department and Position should be detected based on object properties)
-        if "objects" in sheet:
-            assert len(sheet["objects"]) > 0
-    
+        if "relationships" in entity_mapping:
+            assert len(entity_mapping["relationships"]) > 0
+
     def test_workflow_departments(self):
         """Test workflow with departments CSV."""
         config = GeneratorConfig(base_iri="http://example.org/data/")
@@ -298,18 +308,19 @@ class TestGeneratorWorkflowComplete:
         
         mapping = generator.generate(target_class="Department")
         
-        # Verify structure
-        assert len(mapping["sheets"]) == 1
-        sheet = mapping["sheets"][0]
-        
+        # V3: Verify structure
+        assert len(mapping["mappings"]) == 1
+        mapping_name = list(mapping["mappings"].keys())[0]
+        entity_mapping = mapping["mappings"][mapping_name]
+
         # dept_cd should match departmentCode (via hiddenLabel)
-        columns = sheet["columns"]
-        assert "dept_cd" in columns
-        assert "departmentCode" in columns["dept_cd"]["as"]
-        
+        properties = entity_mapping["properties"]
+        assert "dept_cd" in properties
+        assert "departmentCode" in properties["dept_cd"]["predicate"]
+
         # dept_name should match departmentName (via hiddenLabel)
-        assert "dept_name" in columns
-        assert "departmentName" in columns["dept_name"]["as"]
+        assert "dept_name" in properties
+        assert "departmentName" in properties["dept_name"]["predicate"]
 
 
 class TestMatchingPriority:

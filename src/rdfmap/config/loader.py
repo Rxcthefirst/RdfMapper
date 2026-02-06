@@ -6,7 +6,7 @@ from typing import Union
 
 import yaml
 
-from ..models.mapping import MappingConfig
+from ..models.config_v3 import MappingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -14,27 +14,25 @@ logger = logging.getLogger(__name__)
 def load_mapping_config(config_path: Union[str, Path]) -> MappingConfig:
     """Load and validate mapping configuration from YAML, JSON, or RML file.
 
-    Supports both old (v1) and new (v2) config structures with automatic migration.
-
-    New structure (v2) - RECOMMENDED:
-    ```yaml
-    validation: {...}
-    options: {...}
-    mapping:
-      namespaces: {...}
-      base_iri: ...
-      sources: [...]  # or file: ...
-    ```
-
-    Old structure (v1) - DEPRECATED:
+    v3 Universal Format (RML/YARRRML-aligned):
     ```yaml
     namespaces: {...}
-    defaults: {...}
-    sheets: [...]  # or mapping_file: ...
+    base_iri: http://example.org/
+    sources:
+      data_name:
+        path: data.csv
+        format: csv
+    mappings:
+      EntityName:
+        sources: data_name
+        subject:
+          class: ex:Entity
+          iri_template: "..."
+        properties: {...}
+        relationships: {...}
     validation: {...}
+    options: {...}
     ```
-
-    Auto-detects format and version, converts to internal representation.
 
     Args:
         config_path: Path to configuration file
@@ -68,81 +66,53 @@ def load_mapping_config(config_path: Union[str, Path]) -> MappingConfig:
             else:
                 raise ValueError(f"Unsupported config file format: {config_path.suffix}")
 
-        # Detect config version and migrate if needed
-        from .migration import detect_config_version, convert_v2_to_v1_for_engine
-
-        config_version = detect_config_version(config_data)
-
-        if config_version == 'v2':
-            logger.info("New config structure (v2) detected - converting for engine compatibility")
-            # Convert v2 back to v1 for engine compatibility (temporary bridge)
-            config_data = convert_v2_to_v1_for_engine(config_data)
-        else:
-            # Old structure detected - issue deprecation warning
-            logger.warning(
-                "\n" + "="*70 + "\n"
-                "⚠️  DEPRECATION WARNING: Old config structure detected\n"
-                "="*70 + "\n"
-                "Your configuration uses the old structure which will be removed in v1.0.\n"
-                "Please migrate to the new structure for better organization.\n\n"
-                "OLD (deprecated):\n"
-                "  namespaces: {...}\n"
-                "  defaults: {base_iri: ...}\n"
-                "  sheets: [...]\n\n"
-                "NEW (recommended):\n"
-                "  validation: {...}\n"
-                "  options: {...}\n"
-                "  mapping:\n"
-                "    namespaces: {...}\n"
-                "    base_iri: ...\n"
-                "    sources: [...]\n\n"
-                "See docs/CONFIGURATION_FORMATS.md for migration guide.\n"
-                "="*70
-            )
-
-        # Check if this is a config with external mapping_file reference
-        if 'mapping_file' in config_data:
-            # Mode 3: Load external mapping and merge with config options
+        # Check for external mapping file reference
+        if 'mapping_file' in config_data or 'file' in config_data.get('mapping', {}):
             config_data = _load_with_external_mapping(config_data, config_path.parent)
-        else:
-            # Detect format and convert YARRRML if needed
-            format_type = _detect_format(config_data)
 
-            if format_type == 'yarrrml':
-                # Mode 1: Convert YARRRML to internal format
-                from .yarrrml_parser import yarrrml_to_internal
-                config_data = yarrrml_to_internal(config_data, config_path.parent)
+        # Detect format and convert YARRRML if needed
+        format_type = _detect_format(config_data)
+        if format_type == 'yarrrml':
+            from .yarrrml_parser import yarrrml_to_internal
+            config_data = yarrrml_to_internal(config_data, config_path.parent)
 
-    # Validate with Pydantic
+    # Validate with Pydantic (v3 models)
     try:
         config = MappingConfig(**config_data)
     except Exception as e:
         raise ValueError(f"Invalid configuration: {e}")
     
-    # Resolve relative paths in sheet sources
+    # Resolve relative paths in sources
     config_dir = config_path.parent
 
-    # Note: If using external mapping_file, paths were already resolved
-    # in _load_with_external_mapping relative to the mapping file location.
-    # Only resolve paths that are still relative.
-
-    if config.sheets:
-        for sheet in config.sheets:
-            source_path = Path(sheet.source)
-            if not source_path.is_absolute():
-                # Path is still relative, resolve it relative to config file
-                sheet.source = str(config_dir / source_path)
+    for source_name, source in config.sources.items():
+        source_path = Path(source.path)
+        if not source_path.is_absolute():
+            # Resolve relative to config file
+            absolute_path = config_dir / source_path
+            source.path = str(absolute_path)
 
             # Check if source file exists
-            if not Path(sheet.source).exists():
-                raise FileNotFoundError(f"Data source file not found: {sheet.source}")
+            if not absolute_path.exists():
+                logger.warning(f"Data source file not found: {absolute_path}")
 
     # Resolve validation shapes path
-    if config.validation and config.validation.shacl:
+    if config.validation and config.validation.shacl and config.validation.shacl.shapes_file:
         shapes_path = Path(config.validation.shacl.shapes_file)
         if not shapes_path.is_absolute():
             config.validation.shacl.shapes_file = str(config_dir / shapes_path)
     
+    # Resolve import paths
+    if config.imports:
+        resolved_imports = []
+        for import_path_str in config.imports:
+            import_path = Path(import_path_str)
+            if not import_path.is_absolute():
+                resolved_imports.append(str(config_dir / import_path))
+            else:
+                resolved_imports.append(import_path_str)
+        config.imports = resolved_imports
+
     return config
 
 

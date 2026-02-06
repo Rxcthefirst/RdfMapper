@@ -94,8 +94,8 @@ class MappingGenerator:
         output_path: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Generate a mapping configuration.
-        
+        Generate a mapping configuration in v3 format.
+
         Args:
             target_class: URI or label of the target ontology class.
                          If None, will attempt to auto-detect.
@@ -103,7 +103,7 @@ class MappingGenerator:
                         relative paths for data sources.
         
         Returns:
-            Dictionary representation of the mapping configuration
+            Dictionary representation of the mapping configuration (v3 format)
         """
         self.output_path = Path(output_path) if output_path else None
         # Find target class
@@ -116,17 +116,83 @@ class MappingGenerator:
             if not cls:
                 raise ValueError("Could not auto-detect target class. Please specify target_class.")
         
-        # Build mapping
+        # Generate sheet mapping (v2 format internally)
+        sheet_mapping = self._generate_sheet_mapping(cls)
+
+        # Convert to v3 format
+        source_name = sheet_mapping["name"] + "_data"
+        source_path = sheet_mapping["source"]
+
+        # Detect format from file extension
+        source_format = "csv"  # default
+        if source_path.endswith(('.json', '.JSON')):
+            source_format = "json"
+        elif source_path.endswith(('.xml', '.XML')):
+            source_format = "xml"
+        elif source_path.endswith(('.xlsx', '.xls')):
+            source_format = "xlsx"
+
+        # Convert columns to v3 properties format (change 'as' to 'predicate')
+        properties = {}
+        for col_name, col_mapping in sheet_mapping.get("columns", {}).items():
+            prop_def = col_mapping.copy()
+            if "as" in prop_def:
+                prop_def["predicate"] = prop_def.pop("as")
+            properties[col_name] = prop_def
+
+        # Convert objects to v3 relationships format
+        relationships = {}
+        for obj_name, obj_mapping in sheet_mapping.get("objects", {}).items():
+            rel_def = {
+                "predicate": obj_mapping.get("predicate"),
+                "object": {
+                    "class": obj_mapping.get("class"),
+                    "iri_template": obj_mapping.get("iri_template"),
+                    "properties": {}
+                }
+            }
+
+            # Convert object properties (change 'as' to 'predicate')
+            for prop in obj_mapping.get("properties", []):
+                col = prop.get("column")
+                if col:
+                    prop_def = prop.copy()
+                    if "as" in prop_def:
+                        prop_def["predicate"] = prop_def.pop("as")
+                    prop_def.pop("column", None)  # Remove column field
+                    rel_def["object"]["properties"][col] = prop_def
+
+            relationships[obj_name] = rel_def
+
+        # Build v3 config
+        defaults = self._generate_defaults()
+        base_iri = defaults.get("base_iri", "http://example.org/")
+
         self.mapping = {
             "namespaces": self._generate_namespaces(),
-            "defaults": self._generate_defaults(),
-            "sheets": [self._generate_sheet_mapping(cls)],
+            "base_iri": base_iri,
+            "sources": {
+                source_name: {
+                    "path": source_path,
+                    "format": source_format
+                }
+            },
+            "mappings": {
+                cls.label or target_class: {
+                    "sources": source_name,
+                    "subject": sheet_mapping["row_resource"],
+                    "properties": properties,
+                }
+            },
             "options": self._generate_options(),
         }
         
+        # Add relationships if any exist
+        if relationships:
+            self.mapping["mappings"][cls.label or target_class]["relationships"] = relationships
+
         # Add imports if specified
         if self.config.imports:
-            # Ensure imports is captured at top-level mapping (list of strings)
             self.mapping["imports"] = list(self.config.imports)
 
         return self.mapping
